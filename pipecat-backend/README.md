@@ -243,6 +243,8 @@ When a session is created via `POST /api/sessions`, the backend looks up a
 company/interview specific snippet in `src/config/interview_prompts.py`. That
 snippet is appended to the base system prompt before the `VoiceAgent` starts,
 so each session adopts the correct persona (e.g., McKinsey PSI vs. Bain fit).
+Case-style entries also include scenario scripts plus “held-back” data blocks so
+the AI only reveals detailed exhibits when the candidate earns them.
 
 To extend or tweak behavior:
 1. Edit `interview_prompts.py` and adjust the entries keyed by `companySlug`
