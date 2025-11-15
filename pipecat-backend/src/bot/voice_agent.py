@@ -22,6 +22,7 @@ from src.services.tts_service import TTSServiceFactory
 from src.services.stt_service import STTServiceFactory
 from src.transport.daily_transport import DailyTransportFactory
 from src.services.daily_room_service import DailyRoomService, DailyRoomCreationError, DailyRoom
+from src.services.transcript_service import TranscriptWriter
 
 
 class VoiceAgent:
@@ -56,6 +57,7 @@ class VoiceAgent:
         self.stt_provider = stt_provider
         self.room_url = room_url
         self.created_room: Optional[DailyRoom] = None
+        self.transcript_writer: Optional[TranscriptWriter] = None
 
         logger.info(f"Initializing Voice Agent with providers:")
         logger.info(f"  LLM: {llm_provider}")
@@ -211,6 +213,14 @@ class VoiceAgent:
         # Create LLM context
         self.context = self._create_llm_context()
 
+        if self.settings.transcripts_enabled and not self.transcript_writer:
+            transcripts_dir = self.settings.transcripts_dir
+            self.transcript_writer = TranscriptWriter(
+                output_dir=transcripts_dir,
+                room_url=self.room_url,
+                bot_name=self.settings.bot_name,
+            )
+
         # Create context aggregators for managing conversation flow
         from pipecat.processors.aggregators.llm_response import (
             LLMUserContextAggregator,
@@ -227,9 +237,18 @@ class VoiceAgent:
         ]
 
         # Add transcript logger AFTER STT to capture user transcripts and STT metrics
-        if self.settings.is_development:
+        transcript_processing_needed = (
+            self.settings.is_development or self.settings.transcripts_enabled
+        )
+        if transcript_processing_needed:
             from src.bot.handlers import TranscriptLogger
-            transcript_logger = TranscriptLogger()
+
+            transcript_logger = TranscriptLogger(
+                transcript_writer=self.transcript_writer
+                if self.settings.transcripts_enabled
+                else None,
+                enable_console_logs=self.settings.is_development,
+            )
             pipeline_processors.append(transcript_logger)
 
         # Continue with user aggregator and LLM
@@ -239,9 +258,15 @@ class VoiceAgent:
         ])
 
         # Add bot response logger AFTER LLM to capture bot responses and LLM/TTS metrics
-        if self.settings.is_development:
+        if transcript_processing_needed:
             from src.bot.handlers import BotResponseLogger
-            bot_logger = BotResponseLogger()
+
+            bot_logger = BotResponseLogger(
+                transcript_writer=self.transcript_writer
+                if self.settings.transcripts_enabled
+                else None,
+                enable_console_logs=self.settings.is_development,
+            )
             pipeline_processors.append(bot_logger)
 
         # Continue with rest of pipeline
@@ -292,6 +317,7 @@ class VoiceAgent:
 
         This is the main entry point that starts the bot and keeps it running.
         """
+        end_reason = "completed"
         try:
             logger.info("Starting Voice Agent...")
 
@@ -317,11 +343,16 @@ class VoiceAgent:
             await runner.run(task)
 
         except KeyboardInterrupt:
+            end_reason = "interrupted"
             logger.info("Voice Agent stopped by user")
         except Exception as e:
+            end_reason = "error"
             logger.error(f"Error running voice agent: {e}", exc_info=True)
             raise
         finally:
+            if self.transcript_writer:
+                self.transcript_writer.mark_conversation_end(reason=end_reason)
+
             # Cleanup
             logger.info("Cleaning up...")
             if self.task:

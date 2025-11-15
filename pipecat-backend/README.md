@@ -137,7 +137,19 @@ ELEVENLABS_VOICE_ID=your_voice_id_here
 # Application Settings
 LOG_LEVEL=INFO
 ENVIRONMENT=development
+
+# Transcript Archiving
+TRANSCRIPTS_ENABLED=true
+TRANSCRIPTS_OUTPUT_DIR=output
 ```
+
+### Transcript Archiving
+
+Each conversation run is automatically written to the directory defined by
+`TRANSCRIPTS_OUTPUT_DIR` (defaults to `/output` under the project root).
+Transcripts are stored as JSONL with metadata, user turns, and bot turns so they
+can be processed programmatically or tailed while the session is running. Set
+`TRANSCRIPTS_ENABLED=false` to opt out.
 
 ## Customization
 

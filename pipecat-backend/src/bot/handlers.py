@@ -22,6 +22,7 @@ from pipecat.metrics.metrics import (
     TTFBMetricsData,
     TTSUsageMetricsData,
 )
+from src.services.transcript_service import TranscriptWriter
 
 
 class ConversationHandlers:
@@ -122,10 +123,17 @@ class TranscriptLogger(FrameProcessor):
     Tracks latency at each stage of the pipeline.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        transcript_writer: Optional[TranscriptWriter] = None,
+        enable_console_logs: bool = True,
+        **kwargs,
+    ):
         """Initialize the transcript logger."""
         super().__init__(name="TranscriptLogger", **kwargs)
         self.user_message_count = 0
+        self.transcript_writer = transcript_writer
+        self.enable_console_logs = enable_console_logs
         self.bot_message_count = 0
 
         # Track current response being built
@@ -154,19 +162,23 @@ class TranscriptLogger(FrameProcessor):
         if isinstance(frame, TranscriptionFrame):
             self.user_message_count += 1
             self.user_speech_end_time = time.time()
-            logger.info(f"\n{'='*80}")
-            logger.info(f"📝 [User #{self.user_message_count}] {frame.text}")
-            logger.info(f"{'='*80}\n")
+            if self.enable_console_logs:
+                logger.info(f"\n{'='*80}")
+                logger.info(f"📝 [User #{self.user_message_count}] {frame.text}")
+                logger.info(f"{'='*80}\n")
+            if self.transcript_writer:
+                self.transcript_writer.record_message("user", frame.text)
 
         # Track when user aggregator sends context to LLM (going downstream)
         if isinstance(frame, LLMMessagesFrame) and direction == FrameDirection.DOWNSTREAM:
             self.llm_start_time = time.time()
             if self.user_speech_end_time:
                 latency = (self.llm_start_time - self.user_speech_end_time) * 1000
-                logger.info(f"⏱️  STT → LLM latency: {latency:.2f}ms")
+                if self.enable_console_logs:
+                    logger.info(f"⏱️  STT → LLM latency: {latency:.2f}ms")
 
         # Only log STT metrics from this logger (filter out the initial 0.00ms ones)
-        if isinstance(frame, MetricsFrame):
+        if isinstance(frame, MetricsFrame) and self.enable_console_logs:
             for metric_data in frame.data:
                 processor_name = metric_data.processor if hasattr(metric_data, 'processor') else "Unknown"
 
@@ -193,11 +205,18 @@ class BotResponseLogger(FrameProcessor):
     - TTS metrics
     """
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        transcript_writer: Optional[TranscriptWriter] = None,
+        enable_console_logs: bool = True,
+        **kwargs,
+    ):
         """Initialize the bot response logger."""
         super().__init__(name="BotResponseLogger", **kwargs)
         self.bot_message_count = 0
         self.current_bot_response = ""
+        self.transcript_writer = transcript_writer
+        self.enable_console_logs = enable_console_logs
 
     async def process_frame(self, frame: Frame, direction: FrameDirection):
         """
@@ -222,12 +241,15 @@ class BotResponseLogger(FrameProcessor):
         # Log complete bot response when LLM finishes
         if isinstance(frame, LLMFullResponseEndFrame):
             self.bot_message_count += 1
-            logger.info(f"\n{'='*80}")
-            logger.info(f"🤖 [Bot #{self.bot_message_count}] {self.current_bot_response}")
-            logger.info(f"{'='*80}\n")
+            if self.enable_console_logs:
+                logger.info(f"\n{'='*80}")
+                logger.info(f"🤖 [Bot #{self.bot_message_count}] {self.current_bot_response}")
+                logger.info(f"{'='*80}\n")
+            if self.transcript_writer and self.current_bot_response:
+                self.transcript_writer.record_message("assistant", self.current_bot_response)
 
         # Handle metrics frames for LLM and TTS
-        if isinstance(frame, MetricsFrame):
+        if isinstance(frame, MetricsFrame) and self.enable_console_logs:
             for metric_data in frame.data:
                 processor_name = metric_data.processor if hasattr(metric_data, 'processor') else "Unknown"
 

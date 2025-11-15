@@ -87,6 +87,14 @@ class Settings(BaseSettings):
         default="case_interviewer.txt",
         description="System prompt file name (relative to src/system_prompts/)"
     )
+    transcripts_enabled: bool = Field(
+        default=True,
+        description="Persist conversation transcripts to disk"
+    )
+    transcripts_output_dir: str = Field(
+        default="output",
+        description="Directory for archived transcripts (relative to project root or absolute path)"
+    )
 
     # VAD (Voice Activity Detection) Configuration
     vad_enabled: bool = Field(default=True, description="Enable VAD for speech detection")
@@ -128,6 +136,14 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production mode."""
         return self.environment.lower() == "production"
+
+    @property
+    def transcripts_dir(self) -> Path:
+        """Resolved absolute path to the transcripts output directory."""
+        output_path = Path(self.transcripts_output_dir)
+        if not output_path.is_absolute():
+            output_path = PROJECT_ROOT / output_path
+        return output_path
 
     def load_system_prompt(self) -> str:
         """Load the system prompt from the configured file.
