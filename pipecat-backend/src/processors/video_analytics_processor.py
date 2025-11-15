@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import time
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from loguru import logger
 from pipecat.frames.frames import Frame, UserImageRawFrame
@@ -89,6 +89,7 @@ class VideoAnalyticsProcessor(FrameProcessor):
             }
             if event.payload:
                 metadata.update(event.payload)
+            metadata = self._sanitize_metadata(metadata)
             self.transcript_writer.record_event(
                 event_type="vision",
                 text=event.summary,
@@ -99,3 +100,19 @@ class VideoAnalyticsProcessor(FrameProcessor):
             result = self.event_callback(event)
             if inspect.isawaitable(result):
                 await result
+
+    def _sanitize_metadata(self, value: Any):
+        """Convert numpy scalars and other non-native types to JSON-serializable ones."""
+        if isinstance(value, dict):
+            return {k: self._sanitize_metadata(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [self._sanitize_metadata(v) for v in value]
+        if isinstance(value, tuple):
+            return tuple(self._sanitize_metadata(v) for v in value)
+        item = getattr(value, "item", None)
+        if callable(item):
+            try:
+                return item()
+            except Exception:
+                return value
+        return value

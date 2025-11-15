@@ -185,10 +185,10 @@ class Settings(BaseSettings):
         description="Normalized horizontal offset threshold to mark a user as looking away"
     )
     vision_smile_threshold: float = Field(
-        default=1.8,
-        ge=1.1,
-        le=4.0,
-        description="Mouth aspect ratio threshold for considering the user as smiling"
+        default=0.25,
+        ge=0.05,
+        le=1.0,
+        description="Smile width ratio threshold (relative to face width)"
     )
     vision_min_event_gap_secs: float = Field(
         default=2.5,

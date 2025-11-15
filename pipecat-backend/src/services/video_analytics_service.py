@@ -1,14 +1,14 @@
 """
-Computer vision utilities for engagement and emotion tracking.
+Computer vision utilities for engagement and emotion tracking using OpenCV.
 
-This module uses MediaPipe Face Mesh to derive lightweight metrics such as
-eye openness, gaze direction, and smile intensity from incoming video frames.
+The processor leverages Haar cascades (faces/eyes/smiles) to derive attention
+and mood signals from the user's camera feed without requiring MediaPipe.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
+from pathlib import Path
 from threading import Lock
 from typing import Any, Dict, List, Literal, Optional
 
@@ -20,17 +20,6 @@ try:
     import cv2  # type: ignore
 except ImportError:
     cv2 = None  # type: ignore[assignment]
-
-try:
-    import mediapipe as mp  # type: ignore
-except ImportError:
-    mp = None  # type: ignore[assignment]
-
-
-LEFT_EYE_LANDMARKS = (33, 133, 159, 145)
-RIGHT_EYE_LANDMARKS = (263, 362, 386, 374)
-MOUTH_LANDMARKS = (61, 291, 13, 14)
-NOSE_TIP_LANDMARK = 1
 
 
 @dataclass
@@ -72,32 +61,24 @@ class EngagementEvent:
 
 class VideoAnalyticsService:
     """
-    Run MediaPipe Face Mesh on user camera frames to estimate engagement.
+    Run OpenCV cascade detectors on user camera frames to estimate engagement.
 
-    The heavy lifting happens inside MediaPipe and OpenCV; locking ensures that
-    in-flight analyses do not step on each other even if the processor schedules
-    them from multiple threads.
+    Haar cascades are fast on CPU and provide coarse measurements of gaze,
+    eye openness, and smiles without requiring GPU acceleration.
     """
 
     def __init__(self, config: VideoAnalyticsConfig) -> None:
-        if cv2 is None or mp is None:
-            missing = [
-                name for name, module in (("opencv-python", cv2), ("mediapipe", mp)) if module is None
-            ]
-            raise RuntimeError(
-                "Video analytics requires the following packages: "
-                + ", ".join(missing)
-            )
+        if cv2 is None:
+            raise RuntimeError("Video analytics requires opencv-python to be installed.")
 
         self.config = config
         self._lock = Lock()
-        self._face_mesh = mp.solutions.face_mesh.FaceMesh(  # type: ignore[attr-defined]
-            static_image_mode=False,
-            max_num_faces=1,
-            refine_landmarks=True,
-            min_detection_confidence=0.6,
-            min_tracking_confidence=0.5,
-        )
+        haar_dir = Path(cv2.data.haarcascades)
+        self.face_cascade = cv2.CascadeClassifier(str(haar_dir / "haarcascade_frontalface_default.xml"))
+        self.eye_cascade = cv2.CascadeClassifier(str(haar_dir / "haarcascade_eye.xml"))
+        self.smile_cascade = cv2.CascadeClassifier(str(haar_dir / "haarcascade_smile.xml"))
+        if self.face_cascade.empty() or self.eye_cascade.empty() or self.smile_cascade.empty():
+            raise RuntimeError("Failed to load OpenCV Haar cascade files for video analytics.")
 
         logger.info(
             "Initialized VideoAnalyticsService "
@@ -105,9 +86,7 @@ class VideoAnalyticsService:
         )
 
     def close(self) -> None:
-        """Release MediaPipe resources."""
-        if self._face_mesh:
-            self._face_mesh.close()
+        """Nothing to clean up for the OpenCV-based analyzer."""
 
     def analyze_frame(self, frame: UserImageRawFrame, timestamp: float) -> EngagementMetrics:
         """
@@ -119,7 +98,10 @@ class VideoAnalyticsService:
         """
         with self._lock:
             np_frame = self._prepare_image(frame)
-            results = self._face_mesh.process(np_frame)
+
+        gray = cv2.cvtColor(np_frame, cv2.COLOR_RGB2GRAY)
+        gray = cv2.equalizeHist(gray)
+        faces = self.face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
 
         metrics = EngagementMetrics(
             timestamp=timestamp,
@@ -127,29 +109,54 @@ class VideoAnalyticsService:
             face_detected=False,
             attention_score=0.0,
             looking_away=False,
-            eyes_closed=False,
+            eyes_closed=True,
             eye_aspect_ratio=0.0,
             smile_score=0.0,
             is_smiling=False,
             frame_size=(np_frame.shape[1], np_frame.shape[0]),
         )
 
-        if not results.multi_face_landmarks:
+        if len(faces) == 0:
             return metrics
 
-        landmarks = results.multi_face_landmarks[0].landmark
+        # Use the largest detected face as the primary signal.
+        x, y, w, h = max(faces, key=lambda rect: rect[2] * rect[3])
+        face_roi = gray[y : y + h, x : x + w]
 
-        eye_ratio = self._eye_aspect_ratio(landmarks)
-        mouth_ratio = self._mouth_ratio(landmarks)
-        looking_away, attention_score = self._attention_estimate(landmarks)
+        # Estimate gaze based on face position within the frame.
+        center_x = (x + w / 2) / gray.shape[1]
+        center_offset = abs(center_x - 0.5)
+        looking_away = center_offset > self.config.look_away_threshold
+        attention_score = max(
+            0.0,
+            1.0 - min(1.0, center_offset / max(self.config.look_away_threshold, 1e-3)),
+        )
+
+        # Detect eyes to approximate eye-aspect ratio (height/width of box).
+        eyes = self.eye_cascade.detectMultiScale(face_roi, scaleFactor=1.1, minNeighbors=5)
+        eye_ratio = 0.0
+        if len(eyes) > 0:
+            eye_w = max(1, eyes[0][2])
+            eye_h = max(1, eyes[0][3])
+            eye_ratio = eye_h / eye_w
+
+        # Smile detection relies on relative mouth width within the face box.
+        smiles = self.smile_cascade.detectMultiScale(
+            face_roi,
+            scaleFactor=1.3,
+            minNeighbors=20,
+        )
+        smile_ratio = 0.0
+        if len(smiles) > 0:
+            smile_ratio = max(smile_w / w for (_, _, smile_w, _) in smiles)
 
         metrics.face_detected = True
         metrics.eye_aspect_ratio = eye_ratio
-        metrics.smile_score = mouth_ratio
+        metrics.smile_score = smile_ratio
         metrics.attention_score = attention_score
         metrics.eyes_closed = eye_ratio < self.config.eye_aspect_ratio_threshold
         metrics.looking_away = looking_away
-        metrics.is_smiling = mouth_ratio > self.config.smile_threshold
+        metrics.is_smiling = smile_ratio > self.config.smile_threshold
 
         return metrics
 
@@ -166,46 +173,8 @@ class VideoAnalyticsService:
             new_height = max(64, int(height * ratio))
             array = cv2.resize(array, (self.config.max_frame_width, new_height))
 
-        # MediaPipe expects the array to be read-only for performance.
         array.setflags(write=False)
         return array
-
-    def _eye_aspect_ratio(self, landmarks) -> float:
-        left = self._compute_ear(landmarks, LEFT_EYE_LANDMARKS)
-        right = self._compute_ear(landmarks, RIGHT_EYE_LANDMARKS)
-        return (left + right) / 2.0
-
-    def _mouth_ratio(self, landmarks) -> float:
-        left_corner = landmarks[MOUTH_LANDMARKS[0]]
-        right_corner = landmarks[MOUTH_LANDMARKS[1]]
-        top = landmarks[MOUTH_LANDMARKS[2]]
-        bottom = landmarks[MOUTH_LANDMARKS[3]]
-
-        horizontal = self._distance(left_corner, right_corner)
-        vertical = self._distance(top, bottom)
-        if vertical == 0:
-            return 0.0
-        return horizontal / vertical
-
-    def _attention_estimate(self, landmarks) -> tuple[bool, float]:
-        """Estimate whether the user is looking away based on nose placement."""
-        nose = landmarks[NOSE_TIP_LANDMARK]
-        offset = abs(nose.x - 0.5)
-        looking_away = offset > self.config.look_away_threshold
-        normalized = min(offset / self.config.look_away_threshold, 1.0) if self.config.look_away_threshold else 0.0
-        attention_score = max(0.0, 1.0 - normalized)
-        return looking_away, attention_score
-
-    def _compute_ear(self, landmarks, indices: tuple[int, int, int, int]) -> float:
-        horizontal = self._distance(landmarks[indices[0]], landmarks[indices[1]])
-        vertical = self._distance(landmarks[indices[2]], landmarks[indices[3]])
-        if horizontal == 0:
-            return 0.0
-        return vertical / horizontal
-
-    @staticmethod
-    def _distance(a, b) -> float:
-        return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
 
 
 class EngagementStateTracker:

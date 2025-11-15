@@ -174,10 +174,14 @@ class VoiceAgent:
                 min_event_gap_secs=self.settings.vision_min_event_gap_secs
             )
             self._register_video_event_handlers()
+            logger.info(
+                "Vision analytics initialized (target_fps=%s, max_width=%s)",
+                self.settings.vision_target_fps,
+                self.settings.vision_max_frame_width,
+            )
         except RuntimeError as exc:
             raise RuntimeError(
-                "Vision analytics failed to initialize. "
-                "Ensure opencv-python and mediapipe are installed."
+                "Vision analytics failed to initialize. Ensure opencv-python is installed."
             ) from exc
 
     def _register_video_event_handlers(self):
@@ -200,6 +204,7 @@ class VoiceAgent:
         self.transport.add_event_handler("on_client_connected", _on_client_connected)
         self.transport.add_event_handler("on_participant_left", _on_participant_left)
         self._video_event_handlers_registered = True
+        logger.info("Vision analytics event handlers registered with Daily transport")
 
     async def _capture_participant_video(self, transport, participant):
         """Request the participant's camera stream via the Daily API."""
@@ -270,6 +275,13 @@ class VoiceAgent:
         if self.settings.avatar_enabled and self.avatar_frames:
             video_out_width, video_out_height = self.avatar_frames.quiet_frame.size
             video_color_format = self.avatar_frames.quiet_frame.format
+
+        if self.settings.vision_analytics_enabled:
+            logger.info(
+                "Vision analytics enabled - subscribing to participant camera feeds for engagement signals"
+            )
+        else:
+            logger.info("Vision analytics disabled - skipping camera analytics")
 
         # Create transport
         self.transport = DailyTransportFactory.create_transport(

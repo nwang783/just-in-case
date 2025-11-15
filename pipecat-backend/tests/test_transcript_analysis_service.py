@@ -40,3 +40,4 @@ def test_summarize_vision_events_counts_reasons():
     assert summary["smile_stop_events"] == 1
     assert summary["attention_drop_reasons"] == [{"reason": "eyes closed", "count": 1}]
     assert len(summary["example_notes"]) == 4
+    assert "Detected 2 attention-related events" in summary["narrative"]

@@ -209,4 +209,32 @@ class TranscriptAnalyzer:
         if example_notes:
             summary["example_notes"] = example_notes[:10]
 
+        if summary["total_events"] == 0:
+            summary[
+                "narrative"
+            ] = "Vision analytics was enabled but no usable video events were captured."
+        else:
+            parts: List[str] = []
+            if summary["attention_events"]:
+                detail = ""
+                if summary["attention_drop_reasons"]:
+                    top_reasons = ", ".join(
+                        f"{item['reason']} x{item['count']}"
+                        for item in summary["attention_drop_reasons"][:3]
+                    )
+                    detail = f" (common reasons: {top_reasons})"
+                parts.append(
+                    f"Detected {summary['attention_events']} attention-related events{detail}."
+                )
+            if summary["smile_events"]:
+                parts.append(
+                    f"Detected {summary['smile_events']} smile events ({summary['smile_start_events']} start / {summary['smile_stop_events']} stop)."
+                )
+            if summary["example_notes"]:
+                parts.append(
+                    f"Examples: {summary['example_notes'][0]}"
+                    + (" ..." if len(summary["example_notes"]) > 1 else "")
+                )
+            summary["narrative"] = " ".join(parts)
+
         return summary
