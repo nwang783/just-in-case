@@ -24,6 +24,42 @@ type ChartContextProps = {
 
 const ChartContext = React.createContext<ChartContextProps | null>(null);
 
+type ChartTooltipPayloadItem = Record<string, unknown> & {
+  color?: string;
+  dataKey?: string | number;
+  name?: string | number;
+  value?: number | string;
+  payload: Record<string, unknown>;
+};
+
+type ChartTooltipContentProps = React.ComponentProps<"div"> & {
+  active?: boolean;
+  payload?: ChartTooltipPayloadItem[];
+  label?: React.ReactNode;
+  formatter?: (
+    value: number | string,
+    name: string | number | undefined,
+    item: ChartTooltipPayloadItem,
+    index: number,
+    payload: ChartTooltipPayloadItem["payload"],
+  ) => React.ReactNode;
+  labelFormatter?: (value: unknown, payload?: ChartTooltipPayloadItem[]) => React.ReactNode;
+  color?: string;
+  hideLabel?: boolean;
+  hideIndicator?: boolean;
+  indicator?: "line" | "dot" | "dashed";
+  nameKey?: string;
+  labelKey?: string;
+  labelClassName?: string;
+};
+
+type ChartLegendContentProps = React.ComponentProps<"div"> & {
+  payload?: ChartTooltipPayloadItem[];
+  verticalAlign?: "top" | "bottom" | "middle";
+  hideIcon?: boolean;
+  nameKey?: string;
+};
+
 function useChart() {
   const context = React.useContext(ChartContext);
 
@@ -118,14 +154,7 @@ function ChartTooltipContent({
   color,
   nameKey,
   labelKey,
-}: React.ComponentProps<typeof RechartsPrimitive.Tooltip> &
-  React.ComponentProps<"div"> & {
-    hideLabel?: boolean;
-    hideIndicator?: boolean;
-    indicator?: "line" | "dot" | "dashed";
-    nameKey?: string;
-    labelKey?: string;
-  }) {
+}: ChartTooltipContentProps) {
   const { config } = useChart();
 
   const tooltipLabel = React.useMemo(() => {
@@ -256,11 +285,7 @@ function ChartLegendContent({
   payload,
   verticalAlign = "bottom",
   nameKey,
-}: React.ComponentProps<"div"> &
-  Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
-    hideIcon?: boolean;
-    nameKey?: string;
-  }) {
+}: ChartLegendContentProps) {
   const { config } = useChart();
 
   if (!payload?.length) {

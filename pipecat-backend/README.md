@@ -47,7 +47,19 @@ You have two options:
 2. Set `DAILY_ROOM_URL` to the room link in `.env`
 3. Keep `DAILY_AUTO_CREATE_ROOM=false` to reuse the same room each run
 
-### 4. Run the Bot
+### 4. Run the Session API (for frontend control)
+
+Start the FastAPI app so the Next.js frontend can request Daily rooms and
+trigger the Pipecat agent on demand:
+
+```bash
+uvicorn src.server.app:app --reload --port 8000
+```
+
+This exposes endpoints such as `POST /api/sessions` and `POST /api/sessions/{id}/start`.
+See [FastAPI Session API](#fastapi-session-api) for the full contract.
+
+### 5. Run the Bot Directly (optional)
 
 ```bash
 python main.py
@@ -77,6 +89,9 @@ pipecat-backend/
 │   │   ├── llm_service.py      # LLM integration (OpenAI, Anthropic)
 │   │   ├── tts_service.py      # Text-to-Speech (OpenAI, ElevenLabs, Cartesia)
 │   │   └── stt_service.py      # Speech-to-Text (Deepgram)
+│   ├── server/
+│   │   ├── app.py              # FastAPI application
+│   │   └── session_manager.py  # Session lifecycle + Daily rooms
 │   ├── transport/
 │   │   └── daily_transport.py  # Daily.co WebRTC transport
 │   ├── config/
@@ -152,6 +167,10 @@ TRANSCRIPTS_OUTPUT_DIR=output
 TRANSCRIPT_ANALYSIS_ENABLED=true
 TRANSCRIPT_ANALYSIS_MODEL=gpt-5-nano
 TRANSCRIPT_ANALYSIS_OUTPUT_DIR=output/analysis
+
+# FastAPI / Frontend Integration
+# Comma-separated list of additional origins allowed to call the API
+FRONTEND_ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 ### Avatar Video Tile
@@ -197,6 +216,24 @@ coaching insights (summary, key events, sentiment, next steps), and writes them
 to `TRANSCRIPT_ANALYSIS_OUTPUT_DIR` as JSON files (matching the transcript
 filename with an `-analysis` suffix). Use `TRANSCRIPT_ANALYSIS_MODEL` to pick
 any JSON-schema-compatible OpenAI model.
+
+## FastAPI Session API
+
+The FastAPI app allows the web frontend (or other clients) to control when rooms
+are created and when the Pipecat coach joins:
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /api/sessions` | Creates a new Daily room for a company/interview selection and returns `{sessionId, roomUrl, status}`. |
+| `GET /api/sessions/{sessionId}` | Returns current status, room metadata, and any errors. |
+| `POST /api/sessions/{sessionId}/start` | Launches the Pipecat `VoiceAgent` for the given room once the user is ready. |
+| `POST /api/sessions/{sessionId}/stop` | Gracefully stops the running agent. |
+| `GET /api/sessions` | Lists active sessions (useful for debugging). |
+| `GET /healthz` | Basic readiness probe. |
+
+The API enforces CORS for `http://localhost:3000` (and `127.0.0.1`) by default.
+Add more domains using the optional `FRONTEND_ALLOWED_ORIGINS` environment
+variable (comma-separated list).
 
 ## Customization
 

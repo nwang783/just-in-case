@@ -6,7 +6,7 @@ import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Card, CardContent } from "../../../components/ui/card";
 import companyData from "../../../../../company-data.json";
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 
 type InterviewType = {
@@ -34,12 +34,140 @@ type CompanyDataMap = {
 
 const data = companyData as CompanyDataMap;
 
+type InterviewSession = {
+  sessionId: string;
+  companySlug: string;
+  interviewType: string;
+  roomUrl: string;
+  roomName?: string;
+  expiresAt?: number | null;
+  status: string;
+  lastError?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+const SESSION_STATUS_LABELS: Record<string, string> = {
+  room_created: "Room ready — join the link below when you're set.",
+  bot_starting: "Summoning the AI interviewer...",
+  bot_running: "AI interviewer is live in the room.",
+  bot_stopping: "Wrapping up the session...",
+  bot_completed: "Session completed.",
+  bot_error: "Something went wrong starting the AI. Try again.",
+};
+
+const STATUS_STYLES: Record<string, string> = {
+  room_created: "bg-indigo-100 text-indigo-700",
+  bot_starting: "bg-amber-100 text-amber-700",
+  bot_running: "bg-emerald-100 text-emerald-700",
+  bot_stopping: "bg-amber-100 text-amber-700",
+  bot_completed: "bg-gray-200 text-gray-700",
+  bot_error: "bg-red-100 text-red-700",
+};
+
 export default function CompanyDetailPage() {
   const params = useParams();
   const router = useRouter();
   const slug = params?.slug as string;
   const company = data[slug];
   const [selectedInterview, setSelectedInterview] = useState(0);
+  const [session, setSession] = useState<InterviewSession | null>(null);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+  const [isStartingBot, setIsStartingBot] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const selectedInterviewData = company?.interviews[selectedInterview];
+
+  useEffect(() => {
+    // Reset flow when the user switches companies or interview types
+    setSession(null);
+    setErrorMessage(null);
+    setIsCreatingSession(false);
+    setIsStartingBot(false);
+  }, [slug, selectedInterview]);
+
+  const fetchSessionStatus = useCallback(async () => {
+    if (!session?.sessionId) return;
+    try {
+      const response = await fetch(`/api/interview-sessions/${session.sessionId}/status`, {
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      setSession((prev) => (prev ? { ...prev, ...data } : data));
+    } catch (err) {
+      console.error("Failed to refresh session status", err);
+    }
+  }, [session?.sessionId]);
+
+  useEffect(() => {
+    if (!session?.sessionId) return;
+    const pollableStatuses = ["bot_starting", "bot_running", "bot_stopping"];
+    if (!pollableStatuses.includes(session.status)) return;
+
+    const poll = () => {
+      void fetchSessionStatus();
+    };
+
+    poll();
+    const intervalId = setInterval(poll, 4000);
+    return () => clearInterval(intervalId);
+  }, [session?.sessionId, session?.status, fetchSessionStatus]);
+
+  const handleCreateSession = useCallback(async () => {
+    if (!company || !selectedInterviewData) return;
+    setIsCreatingSession(true);
+    setErrorMessage(null);
+    try {
+      const response = await fetch("/api/interview-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companySlug: slug,
+          interviewType: selectedInterviewData.type,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail ?? data.message ?? "Unable to start interview.");
+      }
+      setSession(data);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : "Unable to start interview.");
+    } finally {
+      setIsCreatingSession(false);
+    }
+  }, [company, selectedInterviewData, slug]);
+
+  const handleStartBot = useCallback(async () => {
+    if (!session) return;
+    setIsStartingBot(true);
+    setErrorMessage(null);
+    try {
+      const response = await fetch(`/api/interview-sessions/${session.sessionId}/start`, {
+        method: "POST",
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail ?? data.message ?? "Unable to bring the AI into the room.");
+      }
+      setSession((prev) => (prev ? { ...prev, ...data } : data));
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : "Unable to bring the AI into the room. Try again.",
+      );
+    } finally {
+      setIsStartingBot(false);
+    }
+  }, [session]);
+
+  const statusDescription = session ? SESSION_STATUS_LABELS[session.status] ?? "Updating session..." : null;
+  const statusBadgeStyle = session ? STATUS_STYLES[session.status] ?? "bg-gray-200 text-gray-700" : "";
+  const expiresAtText = useMemo(() => {
+    if (!session?.expiresAt) return null;
+    return new Date(session.expiresAt * 1000).toLocaleString();
+  }, [session?.expiresAt]);
+  const canStartBot = session?.status === "room_created";
 
   if (!company) {
     return (
@@ -146,10 +274,61 @@ export default function CompanyDetailPage() {
                     </p>
                   )}
 
-                  <Button className="w-full bg-indigo-100 text-indigo-600 rounded-full px-8 py-6 text-sm font-semibold hover:bg-indigo-200 transition-colors flex items-center justify-center">
-                    Start Interview
+                  <Button
+                    onClick={handleCreateSession}
+                    disabled={isCreatingSession}
+                    className="w-full bg-indigo-100 text-indigo-600 rounded-full px-8 py-6 text-sm font-semibold hover:bg-indigo-200 transition-colors flex items-center justify-center disabled:opacity-70"
+                  >
+                    {isCreatingSession ? "Preparing your room..." : "Start Interview"}
                     <Play className="ml-2 size-4" />
                   </Button>
+
+                  {errorMessage && (
+                    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                      {errorMessage}
+                    </div>
+                  )}
+
+                  {session && (
+                    <div className="mt-6 space-y-4 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Your private Daily room</p>
+                        <p className="mt-1 break-all text-sm text-gray-600">{session.roomUrl}</p>
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          <Button variant="outline" asChild className="rounded-full">
+                            <a href={session.roomUrl} target="_blank" rel="noreferrer">
+                              Open Daily Room
+                            </a>
+                          </Button>
+                          <Button
+                            onClick={handleStartBot}
+                            disabled={!canStartBot || isStartingBot}
+                            className="rounded-full"
+                          >
+                            {isStartingBot ? "Waiting for the AI..." : "I'm in the room – bring the AI"}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3 rounded-2xl bg-gray-50 p-4">
+                        <div className={`rounded-full p-2 ${statusBadgeStyle}`}>
+                          <CheckCircle2 className="size-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">Status</p>
+                          <p className="text-sm text-gray-600">{statusDescription}</p>
+                        </div>
+                      </div>
+
+                      {session.lastError && (
+                        <p className="text-sm text-red-600">Last error: {session.lastError}</p>
+                      )}
+
+                      {expiresAtText && (
+                        <p className="text-xs text-gray-500">Room expires at {expiresAtText}</p>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
