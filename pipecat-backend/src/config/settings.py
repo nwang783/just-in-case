@@ -112,6 +112,18 @@ class Settings(BaseSettings):
         default="output",
         description="Directory for archived transcripts (relative to project root or absolute path)"
     )
+    transcript_analysis_enabled: bool = Field(
+        default=True,
+        description="Analyze transcripts with OpenAI when a session ends"
+    )
+    transcript_analysis_model: str = Field(
+        default="gpt-5-nano",
+        description="Model used for transcript analysis"
+    )
+    transcript_analysis_output_dir: str = Field(
+        default="output/analysis",
+        description="Directory to store structured transcript analysis"
+    )
 
     # VAD (Voice Activity Detection) Configuration
     vad_enabled: bool = Field(default=True, description="Enable VAD for speech detection")
@@ -158,6 +170,14 @@ class Settings(BaseSettings):
     def transcripts_dir(self) -> Path:
         """Resolved absolute path to the transcripts output directory."""
         output_path = Path(self.transcripts_output_dir)
+        if not output_path.is_absolute():
+            output_path = PROJECT_ROOT / output_path
+        return output_path
+
+    @property
+    def transcript_analysis_dir(self) -> Path:
+        """Resolved absolute path to the transcript analysis output directory."""
+        output_path = Path(self.transcript_analysis_output_dir)
         if not output_path.is_absolute():
             output_path = PROJECT_ROOT / output_path
         return output_path
