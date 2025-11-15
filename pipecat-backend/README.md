@@ -47,7 +47,19 @@ You have two options:
 2. Set `DAILY_ROOM_URL` to the room link in `.env`
 3. Keep `DAILY_AUTO_CREATE_ROOM=false` to reuse the same room each run
 
-### 4. Run the Bot
+### 4. Run the Session API (for frontend control)
+
+Start the FastAPI app so the Next.js frontend can request Daily rooms and
+trigger the Pipecat agent on demand:
+
+```bash
+uvicorn src.server.app:app --reload --port 8000
+```
+
+This exposes endpoints such as `POST /api/sessions` and `POST /api/sessions/{id}/start`.
+See [FastAPI Session API](#fastapi-session-api) for the full contract.
+
+### 5. Run the Bot Directly (optional)
 
 ```bash
 python main.py
@@ -77,6 +89,11 @@ pipecat-backend/
 │   │   ├── llm_service.py      # LLM integration (OpenAI, Anthropic)
 │   │   ├── tts_service.py      # Text-to-Speech (OpenAI, ElevenLabs, Cartesia)
 │   │   └── stt_service.py      # Speech-to-Text (Deepgram)
+│   ├── server/
+│   │   ├── app.py              # FastAPI application
+│   │   └── session_manager.py  # Session lifecycle + Daily rooms
+│   ├── config/
+│   │   └── interview_prompts.py  # Company/interview specific prompt snippets
 │   ├── transport/
 │   │   └── daily_transport.py  # Daily.co WebRTC transport
 │   ├── config/
@@ -152,6 +169,10 @@ TRANSCRIPTS_OUTPUT_DIR=output
 TRANSCRIPT_ANALYSIS_ENABLED=true
 TRANSCRIPT_ANALYSIS_MODEL=gpt-5-nano
 TRANSCRIPT_ANALYSIS_OUTPUT_DIR=output/analysis
+
+# FastAPI / Frontend Integration
+# Comma-separated list of additional origins allowed to call the API
+FRONTEND_ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 ### Avatar Video Tile
@@ -161,6 +182,25 @@ To show an avatar when users join the Daily room:
 2. Set `AVATAR_ENABLED=true` in `.env`. Adjust `AVATAR_ASSETS_DIR` or `AVATAR_FRAME_GLOB` if you use a different folder or naming pattern.
 3. (Optional) Slow down the animation by increasing `AVATAR_FRAME_REPEAT` (each frame is held for N transport frames).
 4. Start the bot normally (`python main.py`). The agent now publishes a video track so the browser displays the animated avatar tile while the bot speaks.
+
+### Vision Analytics (User Engagement)
+
+Set `VISION_ANALYTICS_ENABLED=true` in `.env` to subscribe to each participant's camera feed and run light-weight vision analytics (OpenCV Haar cascades). The processor samples a few frames per second, tracks attention (eye contact / looking away) and smiles, and logs state changes to the console and transcript file. Tunable knobs:
+
+```bash
+VISION_TARGET_FPS=6             # higher = more responsive, higher CPU usage
+VISION_MAX_FRAME_WIDTH=640      # resize width before running the model
+VISION_EYE_AR_THRESHOLD=0.18    # eye-aspect ratio, tweak for your lighting
+VISION_LOOK_AWAY_THRESHOLD=0.12 # nose offset threshold for attention
+VISION_SMILE_THRESHOLD=1.8      # larger ratios make “smile” harder to trigger
+VISION_MIN_EVENT_GAP_SECS=2.5   # debounce for repeated events
+```
+
+After enabling:
+1. `pip install -r requirements.txt` (installs `opencv-python` for the analyzer).
+2. Start the bot (`python main.py`) and join the Daily room with your camera on.
+3. Move your gaze off-screen or smile—the logs should emit entries such as `👀 Vision: User disengaged ...` and the transcript JSONL gains `"event": "vision"` entries. These engagement events are also kept in-memory on `VoiceAgent.last_engagement_event` for future LLM prompt conditioning.
+4. When transcript analysis is enabled, those vision events are summarized and fed into the OpenAI post-run analysis so coaching feedback reflects non-verbal engagement cues.
 
 ### Transcript Archiving
 
@@ -178,6 +218,38 @@ coaching insights (summary, key events, sentiment, next steps), and writes them
 to `TRANSCRIPT_ANALYSIS_OUTPUT_DIR` as JSON files (matching the transcript
 filename with an `-analysis` suffix). Use `TRANSCRIPT_ANALYSIS_MODEL` to pick
 any JSON-schema-compatible OpenAI model.
+
+## FastAPI Session API
+
+The FastAPI app allows the web frontend (or other clients) to control when rooms
+are created and when the Pipecat coach joins:
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /api/sessions` | Creates a new Daily room for a company/interview selection and returns `{sessionId, roomUrl, status}`. |
+| `GET /api/sessions/{sessionId}` | Returns current status, room metadata, and any errors. |
+| `POST /api/sessions/{sessionId}/start` | Launches the Pipecat `VoiceAgent` for the given room once the user is ready. |
+| `POST /api/sessions/{sessionId}/stop` | Gracefully stops the running agent. |
+| `GET /api/sessions` | Lists active sessions (useful for debugging). |
+| `GET /healthz` | Basic readiness probe. |
+
+The API enforces CORS for `http://localhost:3000` (and `127.0.0.1`) by default.
+Add more domains using the optional `FRONTEND_ALLOWED_ORIGINS` environment
+variable (comma-separated list).
+
+## Company-specific Prompt Injection
+
+When a session is created via `POST /api/sessions`, the backend looks up a
+company/interview specific snippet in `src/config/interview_prompts.py`. That
+snippet is appended to the base system prompt before the `VoiceAgent` starts,
+so each session adopts the correct persona (e.g., McKinsey PSI vs. Bain fit).
+Case-style entries also include scenario scripts plus “held-back” data blocks so
+the AI only reveals detailed exhibits when the candidate earns them.
+
+To extend or tweak behavior:
+1. Edit `interview_prompts.py` and adjust the entries keyed by `companySlug`
+   plus the exact `interviewType` strings used by the frontend.
+2. Restart the FastAPI server to pick up the changes.
 
 ## Customization
 

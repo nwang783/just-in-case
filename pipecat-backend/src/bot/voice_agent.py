@@ -31,6 +31,13 @@ from src.services.avatar_service import (
     AvatarLoadingError,
     AvatarService,
 )
+from src.processors.video_analytics_processor import VideoAnalyticsProcessor
+from src.services.video_analytics_service import (
+    EngagementEvent,
+    EngagementStateTracker,
+    VideoAnalyticsConfig,
+    VideoAnalyticsService,
+)
 
 
 class VoiceAgent:
@@ -48,6 +55,7 @@ class VoiceAgent:
         tts_provider: str = "cartesia",
         stt_provider: str = "deepgram",
         room_url: Optional[str] = None,
+        session_prompt: Optional[str] = None,
     ):
         """
         Initialize the voice agent.
@@ -65,9 +73,15 @@ class VoiceAgent:
         self.stt_provider = stt_provider
         self.room_url = room_url
         self.created_room: Optional[DailyRoom] = None
+        self.session_prompt = session_prompt
         self.transcript_writer: Optional[TranscriptWriter] = None
         self.transcript_analyzer: Optional[TranscriptAnalyzer] = None
         self.avatar_frames: Optional[AvatarFrames] = None
+        self.video_analytics_service: Optional[VideoAnalyticsService] = None
+        self.engagement_state_tracker: Optional[EngagementStateTracker] = None
+        self._video_capture_participants: set[str] = set()
+        self._video_event_handlers_registered = False
+        self.last_engagement_event: Optional[EngagementEvent] = None
         self.runner: Optional[PipelineRunner] = None
         self._session_end_reason = "completed"
         self._session_end_triggered = False
@@ -147,6 +161,77 @@ class VoiceAgent:
                 "Check AVATAR_ASSETS_DIR and ensure frames exist."
             ) from exc
 
+    def _initialize_video_analytics(self):
+        """Initialize the video analytics service and register Daily handlers."""
+        config = VideoAnalyticsConfig(
+            target_fps=self.settings.vision_target_fps,
+            max_frame_width=self.settings.vision_max_frame_width,
+            eye_aspect_ratio_threshold=self.settings.vision_eye_ar_threshold,
+            look_away_threshold=self.settings.vision_look_away_threshold,
+            smile_threshold=self.settings.vision_smile_threshold,
+        )
+        try:
+            self.video_analytics_service = VideoAnalyticsService(config=config)
+            self.engagement_state_tracker = EngagementStateTracker(
+                min_event_gap_secs=self.settings.vision_min_event_gap_secs
+            )
+            self._register_video_event_handlers()
+            logger.info(
+                "Vision analytics initialized (target_fps=%s, max_width=%s)",
+                self.settings.vision_target_fps,
+                self.settings.vision_max_frame_width,
+            )
+        except RuntimeError as exc:
+            raise RuntimeError(
+                "Vision analytics failed to initialize. Ensure opencv-python is installed."
+            ) from exc
+
+    def _register_video_event_handlers(self):
+        """Register Daily event handlers to capture participant camera feeds."""
+        if not self.transport or self._video_event_handlers_registered:
+            return
+
+        async def _on_participant_joined(transport, participant):
+            await self._capture_participant_video(transport, participant)
+
+        async def _on_client_connected(transport, participant):
+            await self._capture_participant_video(transport, participant)
+
+        async def _on_participant_left(_transport, participant, *_args):
+            participant_id = participant.get("id")
+            if participant_id:
+                self._video_capture_participants.discard(participant_id)
+
+        self.transport.add_event_handler("on_participant_joined", _on_participant_joined)
+        self.transport.add_event_handler("on_client_connected", _on_client_connected)
+        self.transport.add_event_handler("on_participant_left", _on_participant_left)
+        self._video_event_handlers_registered = True
+        logger.info("Vision analytics event handlers registered with Daily transport")
+
+    async def _capture_participant_video(self, transport, participant):
+        """Request the participant's camera stream via the Daily API."""
+        participant_id = participant.get("id") if isinstance(participant, dict) else None
+        if not participant_id or participant_id in self._video_capture_participants:
+            return
+
+        framerate = max(1, int(self.settings.vision_target_fps * 2))
+        try:
+            await transport.capture_participant_video(
+                participant_id,
+                framerate=framerate,
+                video_source="camera",
+            )
+            self._video_capture_participants.add(participant_id)
+            logger.info(f"Subscribed to camera feed for participant {participant_id}")
+        except Exception as exc:
+            logger.error(
+                f"Failed to subscribe to participant camera feed: {exc}", exc_info=True
+            )
+
+    async def _handle_engagement_event(self, event: EngagementEvent):
+        """Store the latest engagement event for optional downstream use."""
+        self.last_engagement_event = event
+
     def _create_services(self):
         """Create all required services."""
         logger.info("Creating services...")
@@ -193,6 +278,13 @@ class VoiceAgent:
             video_out_width, video_out_height = self.avatar_frames.quiet_frame.size
             video_color_format = self.avatar_frames.quiet_frame.format
 
+        if self.settings.vision_analytics_enabled:
+            logger.info(
+                "Vision analytics enabled - subscribing to participant camera feeds for engagement signals"
+            )
+        else:
+            logger.info("Vision analytics disabled - skipping camera analytics")
+
         # Create transport
         self.transport = DailyTransportFactory.create_transport(
             settings=self.settings,
@@ -200,6 +292,7 @@ class VoiceAgent:
             audio_out_enabled=True,
             audio_in_enabled=True,
             video_out_enabled=self.settings.avatar_enabled,
+            video_in_enabled=self.settings.vision_analytics_enabled,
             video_out_width=video_out_width,
             video_out_height=video_out_height,
             video_out_color_format=video_color_format,
@@ -207,6 +300,9 @@ class VoiceAgent:
             turn_analyzer=turn_analyzer,
         )
         self._register_transport_events()
+
+        if self.settings.vision_analytics_enabled:
+            self._initialize_video_analytics()
 
         # Create STT service
         self.stt = STTServiceFactory.create_stt(
@@ -238,6 +334,11 @@ class VoiceAgent:
         # Load the system prompt from file
         logger.info("Loading system prompt from file")
         system_prompt = self.settings.load_system_prompt()
+        if self.session_prompt:
+            logger.info("Applying session-specific prompt context")
+            system_prompt = (
+                f"{system_prompt}\n\n### Session Context\n{self.session_prompt.strip()}"
+            )
 
         # Create context with system message
         context = OpenAILLMContext(
@@ -279,8 +380,24 @@ class VoiceAgent:
         # Build the pipeline with comprehensive logging
         pipeline_processors = [
             self.transport.input(),           # Audio input from Daily
-            self.stt,                          # Speech-to-Text
         ]
+
+        if self.video_analytics_service and self.engagement_state_tracker:
+            sample_interval = 1.0 / max(1.0, self.settings.vision_target_fps)
+            video_processor = VideoAnalyticsProcessor(
+                analytics_service=self.video_analytics_service,
+                state_tracker=self.engagement_state_tracker,
+                sample_interval_secs=sample_interval,
+                drop_video_frames=True,
+                transcript_writer=self.transcript_writer
+                if self.settings.transcripts_enabled
+                else None,
+                event_callback=self._handle_engagement_event,
+                enable_console_logs=self.settings.is_development,
+            )
+            pipeline_processors.append(video_processor)
+
+        pipeline_processors.append(self.stt)   # Speech-to-Text
 
         # Add transcript logger AFTER STT to capture user transcripts and STT metrics
         transcript_processing_needed = (
@@ -418,6 +535,8 @@ class VoiceAgent:
             logger.info("Cleaning up...")
             if self.task and not self.task.has_finished():
                 await self.task.queue_frame(EndFrame())
+            if self.video_analytics_service:
+                self.video_analytics_service.close()
             self.runner = None
 
     async def stop(self):

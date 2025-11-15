@@ -1,55 +1,60 @@
 "use client";
 
 import * as React from "react";
-import { GripVerticalIcon } from "lucide-react@0.487.0";
-import * as ResizablePrimitive from "react-resizable-panels@2.1.7";
+import { GripVerticalIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
-function ResizablePanelGroup({
-  className,
-  ...props
-}: React.ComponentProps<typeof ResizablePrimitive.PanelGroup>) {
+type DivProps = React.HTMLAttributes<HTMLDivElement>;
+
+/**
+ * Fallback, dependency-free resizable primitives.
+ * These mimic the original component signatures so other modules can import them
+ * without requiring the heavy react-resizable-panels runtime.
+ */
+function ResizablePanelGroup({ className, ...props }: DivProps) {
   return (
-    <ResizablePrimitive.PanelGroup
+    <div
       data-slot="resizable-panel-group"
-      className={cn(
-        "flex h-full w-full data-[panel-group-direction=vertical]:flex-col",
-        className,
-      )}
+      className={cn("flex h-full w-full", className)}
       {...props}
     />
   );
 }
 
-function ResizablePanel({
-  ...props
-}: React.ComponentProps<typeof ResizablePrimitive.Panel>) {
-  return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />;
+function ResizablePanel({ className, ...props }: DivProps) {
+  return (
+    <div
+      data-slot="resizable-panel"
+      className={cn("flex-1", className)}
+      {...props}
+    />
+  );
 }
 
-function ResizableHandle({
-  withHandle,
-  className,
-  ...props
-}: React.ComponentProps<typeof ResizablePrimitive.PanelResizeHandle> & {
+type HandleProps = DivProps & {
   withHandle?: boolean;
-}) {
+};
+
+function ResizableHandle({ withHandle, className, ...props }: HandleProps) {
   return (
-    <ResizablePrimitive.PanelResizeHandle
+    <div
       data-slot="resizable-handle"
+      role="separator"
+      aria-orientation="vertical"
       className={cn(
-        "bg-border focus-visible:ring-ring relative flex w-px items-center justify-center after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 focus-visible:ring-1 focus-visible:ring-offset-1 focus-visible:outline-hidden data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full data-[panel-group-direction=vertical]:after:left-0 data-[panel-group-direction=vertical]:after:h-1 data-[panel-group-direction=vertical]:after:w-full data-[panel-group-direction=vertical]:after:-translate-y-1/2 data-[panel-group-direction=vertical]:after:translate-x-0 [&[data-panel-group-direction=vertical]>div]:rotate-90",
+        "relative flex w-px items-center justify-center bg-border/50 data-[orientation=vertical]:h-px data-[orientation=vertical]:w-full",
         className,
       )}
       {...props}
     >
-      {withHandle && (
-        <div className="bg-border z-10 flex h-4 w-3 items-center justify-center rounded-xs border">
-          <GripVerticalIcon className="size-2.5" />
+      {withHandle ? (
+        <div className="bg-border text-muted-foreground flex size-4 items-center justify-center rounded-sm border shadow-sm">
+          <GripVerticalIcon className="size-3.5" />
+          <span className="sr-only">Resize</span>
         </div>
-      )}
-    </ResizablePrimitive.PanelResizeHandle>
+      ) : null}
+    </div>
   );
 }
 
