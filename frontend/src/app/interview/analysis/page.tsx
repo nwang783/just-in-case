@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, BookOpenCheck, MessageSquare, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
 import mockAnalysis from "../../../../mock-analysis.json";
 
 type KeyEvent = {
@@ -45,24 +46,16 @@ const score = confidenceScore(analysis.case_summary.user_confidence);
 export default function InterviewAnalysisPage() {
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="border-b border-gray-200 bg-white">
-        <div className="container mx-auto max-w-6xl px-4 py-6 flex items-center justify-between">
-          <Link
-            href="/"
-            className="inline-flex items-center text-sm font-medium text-gray-700 hover:text-indigo-700"
-          >
-            <ArrowLeft className="mr-2 size-4" />
-            Back to companies
-          </Link>
-          <Badge variant="secondary" className="capitalize">
-            {analysis.case_summary.case_type}
-          </Badge>
-        </div>
-      </div>
-
       {/* Content */}
-      <div className="container mx-auto max-w-6xl px-4 py-12">
+      <div className="container mx-auto max-w-6xl px-4 py-8">
+        <Button
+          onClick={() => window.location.href = '/'}
+          variant="outline"
+          className="mb-8"
+        >
+          <ArrowLeft className="mr-2 size-4" />
+          Back to Companies
+        </Button>
         {/* Top summary */}
         <Card className="mb-8">
           <CardContent className="p-8">
