@@ -138,10 +138,24 @@ ELEVENLABS_VOICE_ID=your_voice_id_here
 LOG_LEVEL=INFO
 ENVIRONMENT=development
 
+# Avatar Settings
+AVATAR_ENABLED=false
+AVATAR_ASSETS_DIR=assets
+AVATAR_FRAME_GLOB=robot0*.png
+AVATAR_FRAME_REPEAT=1
+
 # Transcript Archiving
 TRANSCRIPTS_ENABLED=true
 TRANSCRIPTS_OUTPUT_DIR=output
 ```
+
+### Avatar Video Tile
+
+To show an avatar when users join the Daily room:
+1. Drop sequential PNG frames (e.g., `robot001.png` …) into `pipecat-backend/assets/`.
+2. Set `AVATAR_ENABLED=true` in `.env`. Adjust `AVATAR_ASSETS_DIR` or `AVATAR_FRAME_GLOB` if you use a different folder or naming pattern.
+3. (Optional) Slow down the animation by increasing `AVATAR_FRAME_REPEAT` (each frame is held for N transport frames).
+4. Start the bot normally (`python main.py`). The agent now publishes a video track so the browser displays the animated avatar tile while the bot speaks.
 
 ### Transcript Archiving
 
