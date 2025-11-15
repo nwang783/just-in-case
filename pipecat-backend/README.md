@@ -147,6 +147,11 @@ AVATAR_FRAME_REPEAT=1
 # Transcript Archiving
 TRANSCRIPTS_ENABLED=true
 TRANSCRIPTS_OUTPUT_DIR=output
+
+# Transcript Analysis
+TRANSCRIPT_ANALYSIS_ENABLED=true
+TRANSCRIPT_ANALYSIS_MODEL=gpt-4o-mini
+TRANSCRIPT_ANALYSIS_OUTPUT_DIR=output/analysis
 ```
 
 ### Avatar Video Tile
@@ -164,6 +169,15 @@ Each conversation run is automatically written to the directory defined by
 Transcripts are stored as JSONL with metadata, user turns, and bot turns so they
 can be processed programmatically or tailed while the session is running. Set
 `TRANSCRIPTS_ENABLED=false` to opt out.
+
+### Transcript Analysis
+
+When `TRANSCRIPT_ANALYSIS_ENABLED=true`, the bot calls OpenAI’s Responses API
+after each session. It reads the saved transcript, generates structured
+coaching insights (summary, key events, sentiment, next steps), and writes them
+to `TRANSCRIPT_ANALYSIS_OUTPUT_DIR` as JSON files (matching the transcript
+filename with an `-analysis` suffix). Use `TRANSCRIPT_ANALYSIS_MODEL` to pick
+any JSON-schema-compatible OpenAI model.
 
 ## Customization
 

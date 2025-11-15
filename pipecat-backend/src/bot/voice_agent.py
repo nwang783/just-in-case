@@ -3,6 +3,7 @@ Voice Agent Pipeline Orchestration.
 Constructs and manages the Pipecat pipeline (STT → LLM → TTS).
 """
 
+import asyncio
 from typing import Optional
 from loguru import logger
 
@@ -23,6 +24,7 @@ from src.services.stt_service import STTServiceFactory
 from src.transport.daily_transport import DailyTransportFactory
 from src.services.daily_room_service import DailyRoomService, DailyRoomCreationError, DailyRoom
 from src.services.transcript_service import TranscriptWriter
+from src.services.transcript_analysis_service import TranscriptAnalyzer
 from src.services.avatar_service import (
     AvatarAnimationProcessor,
     AvatarFrames,
@@ -64,6 +66,7 @@ class VoiceAgent:
         self.room_url = room_url
         self.created_room: Optional[DailyRoom] = None
         self.transcript_writer: Optional[TranscriptWriter] = None
+        self.transcript_analyzer: Optional[TranscriptAnalyzer] = None
         self.avatar_frames: Optional[AvatarFrames] = None
 
         logger.info(f"Initializing Voice Agent with providers:")
@@ -403,6 +406,8 @@ class VoiceAgent:
         finally:
             if self.transcript_writer:
                 self.transcript_writer.mark_conversation_end(reason=end_reason)
+                if self.settings.transcript_analysis_enabled:
+                    await self._trigger_transcript_analysis()
 
             # Cleanup
             logger.info("Cleaning up...")
@@ -414,3 +419,24 @@ class VoiceAgent:
         logger.info("Stopping Voice Agent...")
         if self.task:
             await self.task.queue_frame(EndFrame())
+
+    async def _trigger_transcript_analysis(self):
+        """Run OpenAI transcript analysis asynchronously."""
+        if not self.transcript_writer:
+            return
+
+        transcript_path = self.transcript_writer.file_path
+        if not transcript_path.exists():
+            logger.warning("Transcript file missing, skipping analysis")
+            return
+
+        if not self.transcript_analyzer:
+            self.transcript_analyzer = TranscriptAnalyzer(
+                model=self.settings.transcript_analysis_model,
+                output_dir=self.settings.transcript_analysis_dir,
+            )
+
+        try:
+            await asyncio.to_thread(self.transcript_analyzer.analyze, transcript_path)
+        except Exception as exc:
+            logger.error(f"Transcript analysis failed: {exc}", exc_info=True)
