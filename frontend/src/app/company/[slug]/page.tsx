@@ -146,7 +146,10 @@ export default function CompanyDetailPage() {
                     </p>
                   )}
 
-                  <Button className="w-full bg-indigo-100 text-indigo-600 rounded-full px-8 py-6 text-sm font-semibold hover:bg-indigo-200 transition-colors flex items-center justify-center">
+                  <Button
+                    className="w-full bg-indigo-100 text-indigo-600 rounded-full px-8 py-6 text-sm font-semibold hover:bg-indigo-200 transition-colors flex items-center justify-center"
+                    onClick={() => router.push("/interview/analysis")}
+                  >
                     Start Interview
                     <Play className="ml-2 size-4" />
                   </Button>
