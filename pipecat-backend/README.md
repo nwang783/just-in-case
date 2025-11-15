@@ -147,6 +147,11 @@ AVATAR_FRAME_REPEAT=1
 # Transcript Archiving
 TRANSCRIPTS_ENABLED=true
 TRANSCRIPTS_OUTPUT_DIR=output
+
+# Transcript Analysis
+TRANSCRIPT_ANALYSIS_ENABLED=true
+TRANSCRIPT_ANALYSIS_MODEL=gpt-5-nano
+TRANSCRIPT_ANALYSIS_OUTPUT_DIR=output/analysis
 ```
 
 ### Avatar Video Tile
@@ -174,6 +179,7 @@ After enabling:
 1. `pip install -r requirements.txt` (installs `opencv-python` + `mediapipe`).
 2. Start the bot (`python main.py`) and join the Daily room with your camera on.
 3. Move your gaze off-screen or smile—the logs should emit entries such as `👀 Vision: User disengaged ...` and the transcript JSONL gains `"event": "vision"` entries. These engagement events are also kept in-memory on `VoiceAgent.last_engagement_event` for future LLM prompt conditioning.
+4. When transcript analysis is enabled, those vision events are summarized and fed into the OpenAI post-run analysis so coaching feedback reflects non-verbal engagement cues.
 
 ### Transcript Archiving
 
@@ -182,6 +188,15 @@ Each conversation run is automatically written to the directory defined by
 Transcripts are stored as JSONL with metadata, user turns, and bot turns so they
 can be processed programmatically or tailed while the session is running. Set
 `TRANSCRIPTS_ENABLED=false` to opt out.
+
+### Transcript Analysis
+
+When `TRANSCRIPT_ANALYSIS_ENABLED=true`, the bot calls OpenAI’s Responses API
+after each session. It reads the saved transcript, generates structured
+coaching insights (summary, key events, sentiment, next steps), and writes them
+to `TRANSCRIPT_ANALYSIS_OUTPUT_DIR` as JSON files (matching the transcript
+filename with an `-analysis` suffix). Use `TRANSCRIPT_ANALYSIS_MODEL` to pick
+any JSON-schema-compatible OpenAI model.
 
 ## Customization
 
