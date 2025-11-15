@@ -1,108 +1,55 @@
 """
-Utilities for analyzing finished transcripts with OpenAI.
+Utilities for analyzing finished transcripts with OpenAI Structured Outputs.
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Literal
 
 from loguru import logger
 from openai import OpenAI
+from pydantic import BaseModel, Field, conlist
+
+
+class KeyEvent(BaseModel):
+    timestamp: Optional[str] = None
+    speaker: str
+    message: str
+
+
+class CaseSummary(BaseModel):
+    case_type: str
+    overall_summary: str
+    user_confidence: Literal["high", "medium", "low"]
+
+
+class CoachingFeedback(BaseModel):
+    strengths: conlist(str, max_length=5) = Field(default_factory=list)
+    areas_for_improvement: conlist(str, max_length=5) = Field(default_factory=list)
+    next_practice_focus: conlist(str, max_length=5) = Field(default_factory=list)
+
+
+class Sentiment(BaseModel):
+    user: Literal["positive", "neutral", "negative"]
+    assistant: Literal["supportive", "neutral", "critical"]
+
+
+class TranscriptAnalysisResult(BaseModel):
+    conversation_id: str
+    case_summary: CaseSummary
+    key_events: conlist(KeyEvent, max_length=6) = Field(default_factory=list)
+    coaching_feedback: CoachingFeedback
+    action_items: conlist(str, max_length=5) = Field(default_factory=list)
+    sentiment: Sentiment
 
 
 class TranscriptAnalyzer:
     """Analyze saved transcripts and persist structured insights."""
 
-    RESPONSE_SCHEMA: Dict[str, Any] = {
-        "name": "TranscriptAnalysis",
-        "schema": {
-            "type": "object",
-            "properties": {
-                "conversation_id": {"type": "string"},
-                "case_summary": {
-                    "type": "object",
-                    "properties": {
-                        "case_type": {"type": "string"},
-                        "overall_summary": {"type": "string"},
-                        "user_confidence": {
-                            "type": "string",
-                            "enum": ["high", "medium", "low"],
-                        },
-                    },
-                    "required": ["case_type", "overall_summary", "user_confidence"],
-                    "additionalProperties": False,
-                },
-                "key_events": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "timestamp": {"type": "string"},
-                            "speaker": {"type": "string", "enum": ["user", "assistant"]},
-                            "message": {"type": "string"},
-                        },
-                        "required": ["timestamp", "speaker", "message"],
-                        "additionalProperties": False,
-                    },
-                    "maxItems": 6,
-                },
-                "coaching_feedback": {
-                    "type": "object",
-                    "properties": {
-                        "strengths": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "maxItems": 5,
-                        },
-                        "areas_for_improvement": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "maxItems": 5,
-                        },
-                        "next_practice_focus": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "maxItems": 5,
-                        },
-                    },
-                    "required": ["strengths", "areas_for_improvement", "next_practice_focus"],
-                    "additionalProperties": False,
-                },
-                "action_items": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "maxItems": 5,
-                },
-                "sentiment": {
-                    "type": "object",
-                    "properties": {
-                        "user": {"type": "string", "enum": ["positive", "neutral", "negative"]},
-                        "assistant": {
-                            "type": "string",
-                            "enum": ["supportive", "neutral", "critical"],
-                        },
-                    },
-                    "required": ["user", "assistant"],
-                    "additionalProperties": False,
-                },
-            },
-            "required": [
-                "conversation_id",
-                "case_summary",
-                "key_events",
-                "coaching_feedback",
-                "action_items",
-                "sentiment",
-            ],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    }
-
-    def __init__(self, model: str, output_dir: Path):
-        self.client = OpenAI()
+    def __init__(self, model: str, output_dir: Path, api_key: Optional[str] = None):
+        self.client = OpenAI(api_key=api_key) if api_key else OpenAI()
         self.model = model
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -122,17 +69,33 @@ class TranscriptAnalyzer:
             raise ValueError(f"No transcript entries found at {transcript_path}")
 
         conversation_id = self._extract_conversation_id(entries)
-        prompt = self._build_prompt(entries)
+        prompt = self._build_prompt(entries, conversation_id)
 
         logger.info(f"Analyzing transcript {conversation_id} with model {self.model}")
-        response = self.client.responses.create(
+        response = self.client.responses.parse(
             model=self.model,
-            input=prompt,
-            response_format={"type": "json_schema", "json_schema": self.RESPONSE_SCHEMA},
-            temperature=0.2,
+            input=[
+                {
+                    "role": "system",
+                    "content": "You are a case interview coach that summarizes transcripts into structured coaching insights.",
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(prompt, ensure_ascii=False),
+                },
+            ],
+            text_format=TranscriptAnalysisResult,
         )
 
-        analysis_payload = self._extract_json(response)
+        refusal_reason = self._extract_refusal(response)
+        if refusal_reason:
+            raise RuntimeError(f"Transcript analysis refused by model: {refusal_reason}")
+
+        analysis_model = getattr(response, "output_parsed", None)
+        if not analysis_model:
+            raise ValueError("OpenAI response did not include parsed output")
+
+        analysis_payload = analysis_model.model_dump()
         analysis_payload["conversation_id"] = conversation_id
         analysis_payload["source_transcript"] = str(transcript_path)
 
@@ -158,37 +121,27 @@ class TranscriptAnalyzer:
                 return convo_id
         raise ValueError("Transcript missing conversation_id")
 
-    def _build_prompt(self, entries: List[Dict[str, Any]]) -> str:
-        content = {
+    def _build_prompt(self, entries: List[Dict[str, Any]], conversation_id: str) -> Dict[str, Any]:
+        return {
             "instructions": (
-                "You are an expert case interview coach. "
-                "Review the provided transcript and return concise, structured insights "
-                "that help a coach understand how the session went."
+                "Review the transcript from the perspective of a case interview coach. "
+                "Focus solely on evaluating the candidate (user)—not the coach/assistant. "
+                "Populate every field with concise, user-facing insights and avoid repeating prompts verbatim."
             ),
+            "conversation_id": conversation_id,
             "transcript": entries,
             "analysis_goals": [
-                "Identify the case type and summarize the flow.",
-                "Highlight important conversational moments (questions, hypotheses, numbers).",
-                "Provide coach-ready feedback focused on the candidate.",
-                "List actionable practice items for the candidate.",
-                "Assess sentiment/energy for both participants.",
+                "Determine the case type and summarize the candidate's approach.",
+                "Highlight candidate actions (e.g., clarifying questions, hypotheses, calculations).",
+                "List candidate strengths, areas to improve, and next practice focuses.",
+                "Provide 1–5 action items tailored to the candidate.",
+                "Assess sentiment for the candidate and the assistant's tone.",
             ],
         }
-        return json.dumps(content, ensure_ascii=False)
 
-    def _extract_json(self, response) -> Dict[str, Any]:
-        output_items = getattr(response, "output", None) or []
-        for item in output_items:
-            content_items = getattr(item, "content", None) or []
-            for piece in content_items:
-                payload = None
-                if hasattr(piece, "text") and piece.text:
-                    payload = piece.text
-                elif hasattr(piece, "json") and piece.json:
-                    payload = json.dumps(piece.json)
-                if payload:
-                    try:
-                        return json.loads(payload)
-                    except json.JSONDecodeError:
-                        continue
-        raise ValueError("OpenAI response did not contain JSON output")
+    def _extract_refusal(self, response) -> Optional[str]:
+        for item in getattr(response, "output", []) or []:
+            for piece in getattr(item, "content", []) or []:
+                if getattr(piece, "type", None) == "refusal":
+                    return getattr(piece, "refusal", "Unknown reason")
+        return None

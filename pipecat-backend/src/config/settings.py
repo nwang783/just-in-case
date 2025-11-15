@@ -117,7 +117,7 @@ class Settings(BaseSettings):
         description="Analyze transcripts with OpenAI when a session ends"
     )
     transcript_analysis_model: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5-nano",
         description="Model used for transcript analysis"
     )
     transcript_analysis_output_dir: str = Field(

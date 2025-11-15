@@ -68,6 +68,9 @@ class VoiceAgent:
         self.transcript_writer: Optional[TranscriptWriter] = None
         self.transcript_analyzer: Optional[TranscriptAnalyzer] = None
         self.avatar_frames: Optional[AvatarFrames] = None
+        self.runner: Optional[PipelineRunner] = None
+        self._session_end_reason = "completed"
+        self._session_end_triggered = False
 
         logger.info(f"Initializing Voice Agent with providers:")
         logger.info(f"  LLM: {llm_provider}")
@@ -203,6 +206,7 @@ class VoiceAgent:
             vad_analyzer=vad_analyzer,
             turn_analyzer=turn_analyzer,
         )
+        self._register_transport_events()
 
         # Create STT service
         self.stt = STTServiceFactory.create_stt(
@@ -367,7 +371,8 @@ class VoiceAgent:
 
         This is the main entry point that starts the bot and keeps it running.
         """
-        end_reason = "completed"
+        self._session_end_reason = "completed"
+        self._session_end_triggered = False
         try:
             logger.info("Starting Voice Agent...")
 
@@ -391,34 +396,87 @@ class VoiceAgent:
                 # Note: To actually speak the greeting, you'd need to queue TTS frames
 
             # Create and run the pipeline runner
-            runner = PipelineRunner()
+            self.runner = PipelineRunner()
 
             logger.info("Voice Agent is now running. Press Ctrl+C to stop.")
-            await runner.run(task)
+            await self.runner.run(task)
 
         except KeyboardInterrupt:
-            end_reason = "interrupted"
+            self._set_session_end_reason("interrupted")
             logger.info("Voice Agent stopped by user")
         except Exception as e:
-            end_reason = "error"
+            self._set_session_end_reason("error")
             logger.error(f"Error running voice agent: {e}", exc_info=True)
             raise
         finally:
             if self.transcript_writer:
-                self.transcript_writer.mark_conversation_end(reason=end_reason)
+                self.transcript_writer.mark_conversation_end(reason=self._session_end_reason)
                 if self.settings.transcript_analysis_enabled:
                     await self._trigger_transcript_analysis()
 
             # Cleanup
             logger.info("Cleaning up...")
-            if self.task:
+            if self.task and not self.task.has_finished():
                 await self.task.queue_frame(EndFrame())
+            self.runner = None
 
     async def stop(self):
         """Stop the voice agent gracefully."""
         logger.info("Stopping Voice Agent...")
         if self.task:
             await self.task.queue_frame(EndFrame())
+
+    def _register_transport_events(self):
+        """Attach Daily transport event handlers for lifecycle tracking."""
+        if not self.transport:
+            return
+
+        async def _on_participant_left_event(_transport, participant, reason):
+            await self._handle_participant_left(participant, reason)
+
+        self.transport.add_event_handler("on_participant_left", _on_participant_left_event)
+
+    async def _handle_participant_left(self, participant, reason):
+        """Handle Daily participant departure to gracefully wrap up the session."""
+        if self._session_end_triggered:
+            return
+
+        participant_id = None
+        if isinstance(participant, dict):
+            participant_id = participant.get("id") or participant.get("session_id")
+
+        if self._is_bot_participant(participant_id):
+            return
+
+        reason_text = reason if isinstance(reason, str) else str(reason)
+        logger.info(
+            f"Remote participant left conversation (id={participant_id}, reason={reason_text}). "
+            "Stopping session."
+        )
+
+        self._session_end_triggered = True
+        self._set_session_end_reason("participant_left")
+
+        if self.task and not self.task.has_finished():
+            await self.task.stop_when_done()
+        elif self.runner:
+            await self.runner.stop_when_done()
+
+    def _is_bot_participant(self, participant_id: Optional[str]) -> bool:
+        """Determine if a participant ID is the bot itself."""
+        if not participant_id:
+            return False
+        transport_client = getattr(self.transport, "_client", None)
+        bot_id = getattr(transport_client, "participant_id", "") if transport_client else ""
+        return bool(bot_id) and participant_id == bot_id
+
+    def _set_session_end_reason(self, reason: str):
+        """Update the session end reason using severity precedence."""
+        priority = {"completed": 0, "participant_left": 1, "interrupted": 2, "error": 3}
+        current_priority = priority.get(self._session_end_reason, 0)
+        new_priority = priority.get(reason, 0)
+        if new_priority >= current_priority:
+            self._session_end_reason = reason
 
     async def _trigger_transcript_analysis(self):
         """Run OpenAI transcript analysis asynchronously."""
@@ -434,6 +492,7 @@ class VoiceAgent:
             self.transcript_analyzer = TranscriptAnalyzer(
                 model=self.settings.transcript_analysis_model,
                 output_dir=self.settings.transcript_analysis_dir,
+                api_key=self.settings.openai_api_key,
             )
 
         try:
