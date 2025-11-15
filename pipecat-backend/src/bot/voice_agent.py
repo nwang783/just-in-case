@@ -21,6 +21,7 @@ from src.services.llm_service import LLMServiceFactory
 from src.services.tts_service import TTSServiceFactory
 from src.services.stt_service import STTServiceFactory
 from src.transport.daily_transport import DailyTransportFactory
+from src.services.daily_room_service import DailyRoomService, DailyRoomCreationError, DailyRoom
 
 
 class VoiceAgent:
@@ -54,6 +55,7 @@ class VoiceAgent:
         self.tts_provider = tts_provider
         self.stt_provider = stt_provider
         self.room_url = room_url
+        self.created_room: Optional[DailyRoom] = None
 
         logger.info(f"Initializing Voice Agent with providers:")
         logger.info(f"  LLM: {llm_provider}")
@@ -69,9 +71,52 @@ class VoiceAgent:
         self.pipeline = None
         self.task = None
 
+    def _resolve_room_url(self) -> str:
+        """
+        Determine which Daily room URL to use for this run.
+
+        Preference order:
+        1. Explicit room_url passed into the constructor
+        2. Auto-create a room if enabled in settings
+        3. Fallback to the static DAILY_ROOM_URL
+        """
+        if self.room_url:
+            logger.info(f"Using provided Daily room URL: {self.room_url}")
+            return self.room_url
+
+        if self.settings.daily_auto_create_room:
+            logger.info("Auto room creation enabled - creating new Daily room")
+            room_service = DailyRoomService(self.settings)
+            try:
+                self.created_room = room_service.create_room()
+            except DailyRoomCreationError as exc:
+                raise RuntimeError(
+                    "Failed to auto-create Daily room. "
+                    "Check your Daily API key and permissions."
+                ) from exc
+
+            self.room_url = self.created_room.url
+            logger.info(f"Daily room created: {self.room_url}")
+            if self.created_room.expires_at:
+                logger.info(
+                    f"Room expires at {self.created_room.pretty_expiration()}"
+                )
+            logger.info("Share this link with participants to join the session.")
+            return self.room_url
+
+        if self.settings.daily_room_url:
+            self.room_url = self.settings.daily_room_url
+            logger.info(f"Using configured Daily room URL: {self.room_url}")
+            return self.room_url
+
+        raise ValueError(
+            "No Daily room available. Provide DAILY_ROOM_URL or enable auto creation."
+        )
+
     def _create_services(self):
         """Create all required services."""
         logger.info("Creating services...")
+        resolved_room_url = self._resolve_room_url()
 
         # Create VAD analyzer if enabled
         vad_analyzer = None
@@ -108,7 +153,7 @@ class VoiceAgent:
         # Create transport
         self.transport = DailyTransportFactory.create_transport(
             settings=self.settings,
-            room_url=self.room_url,
+            room_url=resolved_room_url,
             audio_out_enabled=True,
             audio_in_enabled=True,
             vad_analyzer=vad_analyzer,

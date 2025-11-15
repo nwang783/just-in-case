@@ -9,6 +9,7 @@ from pipecat.transports.daily.transport import DailyParams, DailyTransport
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 
 from src.config.settings import Settings
+from src.services.daily_room_service import DailyRoomService
 
 
 class DailyTransportFactory:
@@ -109,26 +110,10 @@ class DailyTransportFactory:
         Note:
             This requires the 'requests' package and Daily.co API access
         """
-        import requests
-
-        url = "https://api.daily.co/v1/rooms"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        payload = {}
-        if room_name:
-            payload["name"] = room_name
-        if exp_time:
-            payload["properties"] = {"exp": exp_time}
-
-        logger.info(f"Creating Daily room: {room_name or 'auto-generated'}")
-
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-
-        room_data = response.json()
+        room_data = DailyRoomService.create_room_with_api_key(
+            api_key=api_key,
+            room_name=room_name,
+            exp_time=exp_time,
+        )
         logger.info(f"Room created: {room_data['url']}")
-
         return room_data

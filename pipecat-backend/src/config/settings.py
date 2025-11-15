@@ -9,12 +9,15 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from loguru import logger
 
+# Resolve project root so .env is loaded regardless of working directory
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(PROJECT_ROOT / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"
@@ -23,6 +26,19 @@ class Settings(BaseSettings):
     # Daily.co Configuration (WebRTC Transport)
     daily_api_key: str = Field(..., description="Daily.co API key")
     daily_room_url: Optional[str] = Field(None, description="Daily.co room URL")
+    daily_auto_create_room: bool = Field(
+        default=False,
+        description="Automatically create a Daily room for each run"
+    )
+    daily_room_prefix: str = Field(
+        default="case-coach",
+        description="Prefix for auto-created Daily rooms"
+    )
+    daily_room_exp_minutes: int = Field(
+        default=120,
+        ge=0,
+        description="Minutes until auto-created rooms expire (0 disables expiration)"
+    )
 
     # OpenAI Configuration (LLM and TTS)
     openai_api_key: str = Field(..., description="OpenAI API key")

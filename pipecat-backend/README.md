@@ -37,20 +37,15 @@ Optional API keys (for alternative TTS providers):
 
 You have two options:
 
-**Option A: Create room via Daily dashboard**
-1. Go to [daily.co](https://www.daily.co/) and create a room
-2. Copy the room URL to `DAILY_ROOM_URL` in `.env`
+**Option A: Auto-create a room at startup (recommended for demos)**
+1. Set `DAILY_AUTO_CREATE_ROOM=true` in `.env`
+2. (Optional) Customize `DAILY_ROOM_PREFIX` and `DAILY_ROOM_EXP_MINUTES`
+3. When you run `python main.py`, the bot logs a unique room URL—share it with participants
 
-**Option B: Create room programmatically**
-```python
-from src.transport.daily_transport import DailyTransportFactory
-
-room = DailyTransportFactory.create_room(
-    api_key="your_daily_api_key",
-    room_name="case-interview-practice"
-)
-print(f"Room URL: {room['url']}")
-```
+**Option B: Use a static room**
+1. Go to [daily.co](https://www.daily.co/) and create a room manually
+2. Set `DAILY_ROOM_URL` to the room link in `.env`
+3. Keep `DAILY_AUTO_CREATE_ROOM=false` to reuse the same room each run
 
 ### 4. Run the Bot
 
@@ -105,6 +100,9 @@ All configuration is done via environment variables in `.env`:
 # Daily.co (Transport)
 DAILY_API_KEY=your_key_here
 DAILY_ROOM_URL=https://your-domain.daily.co/your-room
+DAILY_AUTO_CREATE_ROOM=false         # Enable true to create a room at startup
+DAILY_ROOM_PREFIX=case-coach         # Used when auto-creating rooms
+DAILY_ROOM_EXP_MINUTES=120           # Set how long auto-created rooms remain active
 
 # OpenAI (LLM & TTS)
 OPENAI_API_KEY=your_key_here
