@@ -1,0 +1,52 @@
+{
+    "conversation_id": "conversation-20251115-192130-d9573998",
+    "case_summary": {
+        "case_type": "Market sizing",
+        "overall_summary": "Coach offered case types; candidate chose market sizing; coach presented the NYC coffee shop sizing prompt and invited clarifying questions before starting.",
+        "user_confidence": "medium"
+    },
+    "key_events": [
+        {
+            "timestamp": "2025-11-15T19:21:34.422097+00:00",
+            "speaker": "assistant",
+            "message": "Hi! Ready to dive into a practice case? I can start with a market sizing, profitability, market entry, growth strategy, or pricing case—whichever you prefer. Which type sounds good to you today?"
+        },
+        {
+            "timestamp": "2025-11-15T19:21:50.820799+00:00",
+            "speaker": "user",
+            "message": "Let's go with the first one."
+        },
+        {
+            "timestamp": "2025-11-15T19:21:52.592114+00:00",
+            "speaker": "assistant",
+            "message": "Great choice! Here’s your market sizing case:\n\n“How many coffee shops are there in New York City?”\n\nTake a moment to think about it, and feel free to ask any clarifying questions before you start your approach. What would you like to explore first?"
+        }
+    ],
+    "coaching_feedback": {
+        "strengths": [
+            "Clear, inviting opening that presents options and sets a collaborative tone.",
+            "Encourages clarifying questions and outlines next steps before solving."
+        ],
+        "areas_for_improvement": [
+            "Could prompt candidate to state a hypothesis or an initial approach earlier in the flow.",
+            "Provide a concrete framework cue early (e.g., offer a quick mental model) to help structure the start of the case."
+        ],
+        "next_practice_focus": [
+            "Open with a brief hypothesis and plan.",
+            "Practice asking and documenting clarifying questions upfront.",
+            "Develop a concise market-sizing framework (e.g., customers, transactions, share) for quicker scoping."
+        ]
+    },
+    "action_items": [
+        "Begin openings with a one-sentence hypothesis and plan for the case.",
+        "Ask 2–3 clarifying questions to establish scope (time horizon, geography, definitions) before diving in.",
+        "Use a simple 3-step market-sizing framework and verbalize each step.",
+        "Summarize assumptions and next steps at the end of the initial response.",
+        "Time-box the initial thinking to 2–3 minutes to maintain pace."
+    ],
+    "sentiment": {
+        "user": "neutral",
+        "assistant": "supportive"
+    },
+    "source_transcript": "output/conversation-20251115-192130-d9573998.jsonl"
+}
