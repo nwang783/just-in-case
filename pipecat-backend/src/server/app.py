@@ -81,6 +81,7 @@ class SessionResponse(BaseModel):
     lastError: Optional[str] = None
     createdAt: datetime
     updatedAt: datetime
+    sessionPrompt: Optional[str] = None
 
     @classmethod
     def from_record(cls, record: SessionRecord) -> "SessionResponse":
@@ -95,6 +96,7 @@ class SessionResponse(BaseModel):
             lastError=record.last_error,
             createdAt=record.created_at,
             updatedAt=record.updated_at,
+            sessionPrompt=record.session_prompt,
         )
 
 
@@ -198,4 +200,3 @@ async def list_sessions() -> List[SessionResponse]:
     """Return all active sessions (useful for debugging)."""
     sessions = await session_manager.list_sessions()
     return [SessionResponse.from_record(record) for record in sessions.values()]
-

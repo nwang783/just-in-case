@@ -48,6 +48,7 @@ class VoiceAgent:
         tts_provider: str = "cartesia",
         stt_provider: str = "deepgram",
         room_url: Optional[str] = None,
+        session_prompt: Optional[str] = None,
     ):
         """
         Initialize the voice agent.
@@ -65,6 +66,7 @@ class VoiceAgent:
         self.stt_provider = stt_provider
         self.room_url = room_url
         self.created_room: Optional[DailyRoom] = None
+        self.session_prompt = session_prompt
         self.transcript_writer: Optional[TranscriptWriter] = None
         self.transcript_analyzer: Optional[TranscriptAnalyzer] = None
         self.avatar_frames: Optional[AvatarFrames] = None
@@ -238,6 +240,11 @@ class VoiceAgent:
         # Load the system prompt from file
         logger.info("Loading system prompt from file")
         system_prompt = self.settings.load_system_prompt()
+        if self.session_prompt:
+            logger.info("Applying session-specific prompt context")
+            system_prompt = (
+                f"{system_prompt}\n\n### Session Context\n{self.session_prompt.strip()}"
+            )
 
         # Create context with system message
         context = OpenAILLMContext(
