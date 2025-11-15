@@ -8,13 +8,14 @@ import os
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import FastAPI, HTTPException, Path
+from fastapi import FastAPI, HTTPException, Path, Query
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 from pydantic import BaseModel, Field, ConfigDict
 
 from src.config.settings import settings
 from src.services.daily_room_service import DailyRoomCreationError
+from src.services.analysis_repository import AnalysisRepository, AnalysisStatus
 from .session_manager import (
     SESSION_BOT_COMPLETED,
     SESSION_BOT_ERROR,
@@ -57,6 +58,10 @@ app.add_middleware(
 )
 
 session_manager = SessionManager(settings=settings)
+analysis_repository = AnalysisRepository(
+    transcripts_dir=settings.transcripts_dir,
+    analysis_dir=settings.transcript_analysis_dir,
+)
 
 
 class CreateSessionRequest(BaseModel):
@@ -82,6 +87,9 @@ class SessionResponse(BaseModel):
     createdAt: datetime
     updatedAt: datetime
     sessionPrompt: Optional[str] = None
+    conversationId: Optional[str] = None
+    transcriptPath: Optional[str] = None
+    analysisPath: Optional[str] = None
 
     @classmethod
     def from_record(cls, record: SessionRecord) -> "SessionResponse":
@@ -97,6 +105,9 @@ class SessionResponse(BaseModel):
             createdAt=record.created_at,
             updatedAt=record.updated_at,
             sessionPrompt=record.session_prompt,
+            conversationId=record.conversation_id,
+            transcriptPath=record.transcript_path,
+            analysisPath=record.analysis_path,
         )
 
 
@@ -200,3 +211,24 @@ async def list_sessions() -> List[SessionResponse]:
     """Return all active sessions (useful for debugging)."""
     sessions = await session_manager.list_sessions()
     return [SessionResponse.from_record(record) for record in sessions.values()]
+
+
+@app.get("/api/interviews/analysis", response_model=List[AnalysisStatus])
+def list_analyses(
+    limit: int = Query(20, ge=1, le=100),
+    include_pending: bool = Query(False),
+) -> List[AnalysisStatus]:
+    """Return the latest transcript analyses for the dashboard."""
+    return analysis_repository.list_analyses(limit=limit, include_pending=include_pending)
+
+
+@app.get("/api/interviews/{conversation_id}/analysis", response_model=AnalysisStatus)
+def get_analysis(conversation_id: str) -> AnalysisStatus:
+    """Return analysis status for a particular interview."""
+    status = analysis_repository.get_status(conversation_id)
+    if not status:
+        raise HTTPException(
+            status_code=404,
+            detail="Conversation not found. No transcript or analysis available.",
+        )
+    return status

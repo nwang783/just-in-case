@@ -45,6 +45,9 @@ type InterviewSession = {
   lastError?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  conversationId?: string | null;
+  transcriptPath?: string | null;
+  analysisPath?: string | null;
 };
 
 const SESSION_STATUS_LABELS: Record<string, string> = {
@@ -64,6 +67,14 @@ const STATUS_STYLES: Record<string, string> = {
   bot_completed: "bg-gray-200 text-gray-700",
   bot_error: "bg-red-100 text-red-700",
 };
+
+async function parseJsonSafe<T>(response: Response): Promise<T | null> {
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
 export default function CompanyDetailPage() {
   const params = useParams();
@@ -93,7 +104,8 @@ export default function CompanyDetailPage() {
         cache: "no-store",
       });
       if (!response.ok) return;
-      const data = await response.json();
+      const data = await parseJsonSafe<InterviewSession>(response);
+      if (!data) return;
       setSession((prev) => (prev ? { ...prev, ...data } : data));
     } catch (err) {
       console.error("Failed to refresh session status", err);
@@ -127,9 +139,16 @@ export default function CompanyDetailPage() {
           interviewType: selectedInterviewData.type,
         }),
       });
-      const data = await response.json();
+      const data = await parseJsonSafe<InterviewSession>(response);
       if (!response.ok) {
-        throw new Error(data.detail ?? data.message ?? "Unable to start interview.");
+        throw new Error(
+          (data as unknown as { detail?: string; message?: string })?.detail ??
+            (data as unknown as { message?: string })?.message ??
+            "Unable to start interview.",
+        );
+      }
+      if (!data) {
+        throw new Error("Unexpected response from server while starting the interview.");
       }
       setSession(data);
     } catch (err) {
@@ -147,9 +166,16 @@ export default function CompanyDetailPage() {
       const response = await fetch(`/api/interview-sessions/${session.sessionId}/start`, {
         method: "POST",
       });
-      const data = await response.json();
+      const data = await parseJsonSafe<InterviewSession>(response);
       if (!response.ok) {
-        throw new Error(data.detail ?? data.message ?? "Unable to bring the AI into the room.");
+        throw new Error(
+          (data as unknown as { detail?: string; message?: string })?.detail ??
+            (data as unknown as { message?: string })?.message ??
+            "Unable to bring the AI into the room.",
+        );
+      }
+      if (!data) {
+        throw new Error("Unexpected response from server while starting the AI.");
       }
       setSession((prev) => (prev ? { ...prev, ...data } : data));
     } catch (err) {
@@ -168,6 +194,10 @@ export default function CompanyDetailPage() {
     return new Date(session.expiresAt * 1000).toLocaleString();
   }, [session?.expiresAt]);
   const canStartBot = session?.status === "room_created";
+  const canViewAnalysis = Boolean(session?.conversationId);
+  const analysisHref = session?.conversationId
+    ? `/interview/analysis?conversationId=${encodeURIComponent(session.conversationId)}`
+    : null;
 
   if (!company) {
     return (
@@ -326,6 +356,29 @@ export default function CompanyDetailPage() {
 
                       {expiresAtText && (
                         <p className="text-xs text-gray-500">Room expires at {expiresAtText}</p>
+                      )}
+
+                      {canViewAnalysis && (
+                        <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 space-y-3">
+                          <div>
+                            <p className="text-sm font-semibold text-gray-900">Session analysis ready</p>
+                            <p className="text-sm text-gray-600">
+                              Review coaching insights from this run. We&apos;ll auto-refresh that page until the
+                              report finishes rendering.
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-3">
+                            <Button
+                              className="rounded-full"
+                              onClick={() => analysisHref && router.push(analysisHref)}
+                            >
+                              View Interview Analysis
+                            </Button>
+                            <p className="text-xs text-gray-500">
+                              Conversation ID: <span className="font-mono">{session.conversationId}</span>
+                            </p>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}

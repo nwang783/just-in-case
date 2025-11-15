@@ -1,16 +1,21 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowLeft, BookOpenCheck, MessageSquare, Sparkles } from "lucide-react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, BookOpenCheck, Loader2, MessageSquare, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
-import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
-import mockAnalysis from "../../../../mock-analysis.json";
 
 type KeyEvent = {
-  timestamp: string;
-  speaker: "assistant" | "user";
+  timestamp?: string;
+  speaker: string;
   message: string;
+};
+
+type CoachingFeedback = {
+  strengths: string[];
+  areas_for_improvement: string[];
+  next_practice_focus: string[];
 };
 
 type Analysis = {
@@ -20,19 +25,31 @@ type Analysis = {
     user_confidence: string;
   };
   key_events: KeyEvent[];
-  coaching_feedback: {
-    strengths: string[];
-    areas_for_improvement: string[];
-    next_practice_focus: string[];
-  };
+  coaching_feedback: CoachingFeedback;
   action_items: string[];
   sentiment: {
     user: string;
     assistant: string;
   };
+  engagement_summary?: {
+    summary?: string;
+  };
+  source_transcript?: string;
 };
 
-const analysis = mockAnalysis as Analysis;
+type BackendAnalysisResponse = {
+  conversation_id: string;
+  status: "pending" | "ready";
+  updated_at: string;
+  analysis: (Analysis & { source_transcript?: string }) | null;
+};
+
+type AnalysisStatus = {
+  conversationId: string;
+  status: "pending" | "ready";
+  updatedAt: string;
+  analysis: Analysis | null;
+};
 
 function confidenceScore(confidence: string) {
   const value = confidence.toLowerCase();
@@ -41,25 +58,204 @@ function confidenceScore(confidence: string) {
   return 60;
 }
 
-const score = confidenceScore(analysis.case_summary.user_confidence);
+function normalizeResponse(data: BackendAnalysisResponse): AnalysisStatus {
+  return {
+    conversationId: data.conversation_id,
+    status: data.status,
+    updatedAt: data.updated_at,
+    analysis: data.analysis ?? null,
+  };
+}
 
 export default function InterviewAnalysisPage() {
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Content */}
-      <div className="container mx-auto max-w-6xl px-4 py-8">
-        <Button
-          onClick={() => window.location.href = '/'}
-          variant="outline"
-          className="mb-8"
-        >
-          <ArrowLeft className="mr-2 size-4" />
-          Back to Companies
-        </Button>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center gap-4 text-gray-700">
+          <Loader2 className="size-10 animate-spin text-indigo-600" />
+          <p>Loading interview analysis…</p>
+        </div>
+      }
+    >
+      <AnalysisContent />
+    </Suspense>
+  );
+}
+
+function AnalysisContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const conversationId = searchParams.get("conversationId");
+
+  const [status, setStatus] = useState<AnalysisStatus | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStatus(null);
+    setError(null);
+    if (!conversationId) {
+      setIsLoading(false);
+      return;
+    }
+
+    let isCancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const fetchAnalysis = async (withSpinner = false) => {
+      if (withSpinner) {
+        setIsLoading(true);
+      }
+      try {
+        const response = await fetch(`/api/interview-analysis/${conversationId}`);
+        const payload = (await response.json().catch(() => null)) as BackendAnalysisResponse | null;
+        if (!response.ok || !payload) {
+          const message =
+            (payload as unknown as { detail?: string; message?: string })?.detail ??
+            (payload as unknown as { message?: string })?.message ??
+            "Unable to load analysis.";
+          throw new Error(message);
+        }
+
+        if (isCancelled) {
+          return;
+        }
+
+        const normalized = normalizeResponse(payload);
+        setStatus(normalized);
+        setError(null);
+
+        if (timeout) {
+          clearTimeout(timeout);
+          timeout = null;
+        }
+
+        if (normalized.status === "pending") {
+          timeout = setTimeout(() => fetchAnalysis(false), 5000);
+        }
+      } catch (err) {
+        if (!isCancelled) {
+          setError(err instanceof Error ? err.message : "Unable to reach analysis service.");
+        }
+      } finally {
+        if (!isCancelled && withSpinner) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchAnalysis(true);
+
+    return () => {
+      isCancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [conversationId]);
+
+  const readyAnalysis = status?.status === "ready" ? status.analysis : null;
+  const score = useMemo(
+    () => (readyAnalysis ? confidenceScore(readyAnalysis.case_summary.user_confidence) : 0),
+    [readyAnalysis],
+  );
+
+  const showLoader = isLoading && !status;
+
+  const renderContent = () => {
+    if (!conversationId) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>No conversation selected</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600">
+              Pass a <code className="rounded bg-gray-100 px-1.5 py-0.5 text-sm">conversationId</code> query
+              parameter (e.g., <code>/interview/analysis?conversationId=conversation-1234</code>) after a session
+              ends to view its analysis report.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (showLoader) {
+      return (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-12">
+            <Loader2 className="size-10 animate-spin text-indigo-600" />
+            <p className="text-gray-700">Fetching interview analysis…</p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (error) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Unable to load analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-red-600">{error}</p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (!status) {
+      return null;
+    }
+
+    if (status.status === "pending") {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>Analysis is still running</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-gray-700">
+              We&apos;re summarizing your transcript now. This page will refresh automatically once the report is ready.
+            </p>
+            <p className="text-sm text-gray-500">
+              Conversation ID: <span className="font-mono">{status.conversationId}</span>
+            </p>
+            <p className="text-sm text-gray-500">
+              Last update: {new Date(status.updatedAt).toLocaleString()}
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (!readyAnalysis) {
+      return (
+        <Card>
+          <CardHeader>
+            <CardTitle>No analysis data available</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-gray-600">
+              The backend returned a completed status without any payload. Please try again or run a new interview.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const keyEvents = readyAnalysis.key_events ?? [];
+    const strengths = readyAnalysis.coaching_feedback?.strengths ?? [];
+    const improvements = readyAnalysis.coaching_feedback?.areas_for_improvement ?? [];
+    const nextFocus = readyAnalysis.coaching_feedback?.next_practice_focus ?? [];
+    const actionItems = readyAnalysis.action_items ?? [];
+
+    return (
+      <>
         {/* Top summary */}
         <Card className="mb-8">
           <CardContent className="p-8">
-            <div className="flex gap-8">
+            <div className="flex gap-8 flex-col lg:flex-row">
               <div className="flex-1">
                 <div className="flex items-start gap-4 mb-6">
                   <div className="flex size-12 items-center justify-center rounded-xl bg-indigo-100">
@@ -67,19 +263,17 @@ export default function InterviewAnalysisPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium uppercase tracking-wide text-gray-500 mb-2">
-                      {analysis.case_summary.case_type}
+                      {readyAnalysis.case_summary.case_type}
                     </p>
-                    <h1 className="text-3xl font-bold text-gray-900">
-                      Case Opening Analysis
-                    </h1>
+                    <h1 className="text-3xl font-bold text-gray-900">Case Opening Analysis</h1>
                   </div>
                 </div>
                 <p className="text-base text-gray-700 leading-relaxed">
-                  {analysis.case_summary.overall_summary}
+                  {readyAnalysis.case_summary.overall_summary}
                 </p>
               </div>
 
-              <div className="border-l-2 border-gray-400 self-stretch"></div>
+              <div className="border-l-2 border-gray-200 self-stretch hidden lg:block" />
 
               <div className="flex flex-col items-center justify-center gap-3 min-w-[160px]">
                 <div className="flex items-center justify-center">
@@ -124,7 +318,7 @@ export default function InterviewAnalysisPage() {
                 </div>
                 <div className="text-center">
                   <p className="text-base font-semibold text-gray-900 capitalize">
-                    {analysis.case_summary.user_confidence} confidence
+                    {readyAnalysis.case_summary.user_confidence} confidence
                   </p>
                 </div>
               </div>
@@ -143,9 +337,7 @@ export default function InterviewAnalysisPage() {
                   <div className="flex size-12 items-center justify-center rounded-xl bg-indigo-100">
                     <BookOpenCheck className="size-6 text-indigo-600" />
                   </div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    Coaching Feedback
-                  </h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Coaching Feedback</h2>
                 </div>
 
                 <div className="grid gap-8 md:grid-cols-3">
@@ -154,12 +346,16 @@ export default function InterviewAnalysisPage() {
                       Strengths
                     </p>
                     <ul className="space-y-2.5 text-sm text-gray-700 leading-relaxed">
-                      {analysis.coaching_feedback.strengths.map((item, idx) => (
-                        <li key={idx} className="flex gap-2">
-                          <span className="text-emerald-600">•</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
+                      {strengths.length ? (
+                        strengths.map((item, idx) => (
+                          <li key={idx} className="flex gap-2">
+                            <span className="text-emerald-600">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-gray-500">No strengths captured.</li>
+                      )}
                     </ul>
                   </div>
                   <div>
@@ -167,12 +363,16 @@ export default function InterviewAnalysisPage() {
                       Improve next
                     </p>
                     <ul className="space-y-2.5 text-sm text-gray-700 leading-relaxed">
-                      {analysis.coaching_feedback.areas_for_improvement.map((item, idx) => (
-                        <li key={idx} className="flex gap-2">
-                          <span className="text-amber-600">•</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
+                      {improvements.length ? (
+                        improvements.map((item, idx) => (
+                          <li key={idx} className="flex gap-2">
+                            <span className="text-amber-600">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-gray-500">Nothing flagged here.</li>
+                      )}
                     </ul>
                   </div>
                   <div>
@@ -180,12 +380,16 @@ export default function InterviewAnalysisPage() {
                       Next practice focus
                     </p>
                     <ul className="space-y-2.5 text-sm text-gray-700 leading-relaxed">
-                      {analysis.coaching_feedback.next_practice_focus.map((item, idx) => (
-                        <li key={idx} className="flex gap-2">
-                          <span className="text-sky-600">•</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
+                      {nextFocus.length ? (
+                        nextFocus.map((item, idx) => (
+                          <li key={idx} className="flex gap-2">
+                            <span className="text-sky-600">•</span>
+                            <span>{item}</span>
+                          </li>
+                        ))
+                      ) : (
+                        <li className="text-gray-500">No follow-up focus provided.</li>
+                      )}
                     </ul>
                   </div>
                 </div>
@@ -199,23 +403,25 @@ export default function InterviewAnalysisPage() {
                   <div className="flex size-12 items-center justify-center rounded-xl bg-indigo-100">
                     <MessageSquare className="size-6 text-indigo-600" />
                   </div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    Conversation Highlights
-                  </h2>
+                  <h2 className="text-2xl font-bold text-gray-900">Conversation Highlights</h2>
                 </div>
 
-                <div className="space-y-6">
-                  {analysis.key_events.map((event, idx) => (
-                    <div key={idx}>
-                      <div className="text-sm font-medium text-indigo-700 mb-2 capitalize">
-                        {event.speaker === "assistant" ? "Coach" : "You"}
+                {keyEvents.length ? (
+                  <div className="space-y-6">
+                    {keyEvents.map((event, idx) => (
+                      <div key={`${event.timestamp ?? idx}-${idx}`}>
+                        <div className="text-sm font-medium text-indigo-700 mb-2 capitalize">
+                          {event.speaker?.toLowerCase() === "assistant" ? "Coach" : "You"}
+                        </div>
+                        <blockquote className="text-gray-700 italic leading-relaxed border-l-4 border-indigo-300 pl-6 py-2">
+                          {event.message}
+                        </blockquote>
                       </div>
-                      <blockquote className="text-gray-700 italic leading-relaxed border-l-4 border-indigo-300 pl-6 py-2">
-                        {event.message}
-                      </blockquote>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-600">No highlights available for this conversation.</p>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -233,49 +439,93 @@ export default function InterviewAnalysisPage() {
                     <p className="text-sm font-medium uppercase tracking-wide text-emerald-700 mb-1">
                       Next steps
                     </p>
-                    <h2 className="text-2xl font-bold text-gray-900">
-                      Action Items
-                    </h2>
+                    <h2 className="text-2xl font-bold text-gray-900">Action Items</h2>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  {analysis.action_items.map((item, idx) => (
-                    <div key={idx} className="flex gap-4">
-                      <span className="mt-0.5 inline-flex size-6 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800 shrink-0">
-                        {idx + 1}
-                      </span>
-                      <p className="text-base leading-relaxed text-gray-700">
-                        {item}
-                      </p>
-                    </div>
-                  ))}
+                  {actionItems.length ? (
+                    actionItems.map((item, idx) => (
+                      <div key={idx} className="flex gap-4">
+                        <span className="mt-0.5 inline-flex size-6 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-800 shrink-0">
+                          {idx + 1}
+                        </span>
+                        <p className="text-base leading-relaxed text-gray-700">{item}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-600">No action items recorded.</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
             {/* Sentiment Overview */}
             <Card>
-              <CardContent className="p-8">
-                <h2 className="text-xl font-bold mb-6 text-gray-900">Sentiment Overview</h2>
+              <CardContent className="p-8 space-y-6">
+                <h2 className="text-xl font-bold text-gray-900">Sentiment Overview</h2>
                 <div className="space-y-6">
                   <div className="pb-6 border-b border-gray-200">
                     <div className="text-sm text-gray-600 mb-2">Your sentiment</div>
                     <div className="text-base font-semibold text-gray-900 capitalize">
-                      {analysis.sentiment.user}
+                      {readyAnalysis.sentiment.user}
                     </div>
                   </div>
                   <div>
                     <div className="text-sm text-gray-600 mb-2">Coach sentiment</div>
                     <div className="text-base font-semibold text-gray-900 capitalize">
-                      {analysis.sentiment.assistant}
+                      {readyAnalysis.sentiment.assistant}
                     </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
+
+            {readyAnalysis.engagement_summary?.summary ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Engagement Notes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-700">{readyAnalysis.engagement_summary.summary}</p>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            {readyAnalysis.source_transcript ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Transcript</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(readyAnalysis.source_transcript, "_blank")}
+                    className="w-full"
+                  >
+                    View raw transcript
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
         </div>
+      </>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto max-w-6xl px-4 py-8">
+        <Button
+          onClick={() => router.push("/")}
+          variant="outline"
+          className="mb-8"
+        >
+          <ArrowLeft className="mr-2 size-4" />
+          Back to Companies
+        </Button>
+        {renderContent()}
       </div>
     </div>
   );
