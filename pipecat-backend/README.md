@@ -250,6 +250,49 @@ To extend or tweak behavior:
 1. Edit `interview_prompts.py` and adjust the entries keyed by `companySlug`
    plus the exact `interviewType` strings used by the frontend.
 2. Restart the FastAPI server to pick up the changes.
+### Interview Analysis API
+
+The same FastAPI server (`uvicorn src.server.app:app --reload --port 8000`) also
+exposes structured transcript analyses so the frontend's `interview/analysis`
+page can render the OpenAI-generated coaching report.
+
+Endpoints:
+
+- `GET /api/interviews/analysis?limit=20&include_pending=true` — returns the newest analyses and (optionally) transcripts that are still processing so you can show a “pending” badge.
+- `GET /api/interviews/{conversation_id}/analysis` — returns the detailed payload (case summary, key events, strengths, areas, next steps, action items, sentiment, engagement summary, and `source_transcript`). When the analysis file doesn’t exist yet you’ll receive `{ "status": "pending" }`.
+
+Sample response:
+
+```json
+[
+  {
+    "conversation_id": "conversation-20251115-210044-75bdda98",
+    "status": "ready",
+    "updated_at": "2025-11-15T21:02:00.000000+00:00",
+    "analysis": {
+      "case_summary": { "...": "..." },
+      "key_events": [ { "timestamp": "...", "speaker": "User", "message": "..." } ],
+      "coaching_feedback": { "...": "..." },
+      "action_items": [ "..." ],
+      "sentiment": { "user": "neutral", "assistant": "supportive" },
+      "engagement_summary": { "summary": "..." },
+      "source_transcript": "/absolute/path/to/output/conversation-....jsonl"
+    }
+  },
+  {
+    "conversation_id": "conversation-20251116-173015-5a2c91c9",
+    "status": "pending",
+    "updated_at": "2025-11-16T17:30:30.000000+00:00",
+    "analysis": null
+  }
+]
+```
+
+The `TranscriptWriter` logs `Transcripts will be saved to: ...conversation-<slug>.jsonl`
+as soon as a run starts. After a session finishes, `GET /api/sessions/{id}` now
+includes `conversationId` so the frontend can redirect to
+`/interview/analysis?conversationId=...` and poll the analysis endpoint until it
+returns `status: "ready"`.
 
 ## Customization
 

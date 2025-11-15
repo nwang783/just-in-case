@@ -53,6 +53,9 @@ class SessionRecord:
     session_prompt: Optional[str] = None
     bot_task: Optional[asyncio.Task] = field(default=None, repr=False)
     voice_agent: Optional[VoiceAgent] = field(default=None, repr=False)
+    conversation_id: Optional[str] = None
+    transcript_path: Optional[str] = None
+    analysis_path: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Optional[str]]:
         """Serialize the record for API responses."""
@@ -67,6 +70,9 @@ class SessionRecord:
             "lastError": self.last_error,
             "createdAt": self.created_at.isoformat(),
             "updatedAt": self.updated_at.isoformat(),
+            "conversationId": self.conversation_id,
+            "transcriptPath": self.transcript_path,
+            "analysisPath": self.analysis_path,
         }
 
 
@@ -199,5 +205,15 @@ class SessionManager:
             session = self._sessions.get(session_id)
             if not session:
                 return
+            agent = session.voice_agent
+            if agent and agent.transcript_writer:
+                writer = agent.transcript_writer
+                session.conversation_id = writer.conversation_id
+                session.transcript_path = str(writer.file_path)
+                analysis_path = (
+                    self.settings.transcript_analysis_dir
+                    / f"{writer.file_path.stem}-analysis.json"
+                )
+                session.analysis_path = str(analysis_path)
             session.bot_task = None
             session.voice_agent = None
