@@ -4,6 +4,7 @@ Utilities for analyzing finished transcripts with OpenAI Structured Outputs.
 
 from __future__ import annotations
 
+from collections import Counter
 import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Literal
@@ -36,6 +37,15 @@ class Sentiment(BaseModel):
     assistant: Literal["supportive", "neutral", "critical"]
 
 
+class EngagementSummary(BaseModel):
+    """High-level interpretation of the user's non-verbal engagement."""
+
+    summary: str = Field(
+        default="",
+        description="Narrative summary about the candidate's engagement, referencing vision analytics.",
+    )
+
+
 class TranscriptAnalysisResult(BaseModel):
     conversation_id: str
     case_summary: CaseSummary
@@ -43,6 +53,7 @@ class TranscriptAnalysisResult(BaseModel):
     coaching_feedback: CoachingFeedback
     action_items: conlist(str, max_length=5) = Field(default_factory=list)
     sentiment: Sentiment
+    engagement_summary: EngagementSummary = Field(default_factory=EngagementSummary)
 
 
 class TranscriptAnalyzer:
@@ -122,6 +133,7 @@ class TranscriptAnalyzer:
         raise ValueError("Transcript missing conversation_id")
 
     def _build_prompt(self, entries: List[Dict[str, Any]], conversation_id: str) -> Dict[str, Any]:
+        vision_summary = self._summarize_vision_events(entries)
         return {
             "instructions": (
                 "Review the transcript from the perspective of a case interview coach. "
@@ -136,7 +148,9 @@ class TranscriptAnalyzer:
                 "List candidate strengths, areas to improve, and next practice focuses.",
                 "Provide 1–5 action items tailored to the candidate.",
                 "Assess sentiment for the candidate and the assistant's tone.",
+                "Leverage the provided vision analytics summary when commenting on engagement, confidence, or non-verbal cues.",
             ],
+            "vision_analytics": vision_summary,
         }
 
     def _extract_refusal(self, response) -> Optional[str]:
@@ -145,3 +159,82 @@ class TranscriptAnalyzer:
                 if getattr(piece, "type", None) == "refusal":
                     return getattr(piece, "refusal", "Unknown reason")
         return None
+
+    @staticmethod
+    def _summarize_vision_events(entries: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Aggregate engagement events emitted by the vision analytics processor."""
+        summary = {
+            "total_events": 0,
+            "attention_events": 0,
+            "attention_regained_events": 0,
+            "attention_drop_reasons": [],
+            "smile_events": 0,
+            "smile_start_events": 0,
+            "smile_stop_events": 0,
+            "example_notes": [],
+        }
+
+        reasons = Counter()
+        example_notes: List[str] = []
+        for entry in entries:
+            if entry.get("type") != "event" or entry.get("event") != "vision":
+                continue
+
+            summary["total_events"] += 1
+            metadata = entry.get("metadata", {}) or {}
+            note = entry.get("text") or ""
+            if note:
+                example_notes.append(note)
+
+            event_type = metadata.get("event_type")
+            if event_type == "attention":
+                summary["attention_events"] += 1
+                reason = metadata.get("reason")
+                if reason:
+                    reasons[reason] += 1
+                else:
+                    summary["attention_regained_events"] += 1
+            elif event_type == "smile":
+                summary["smile_events"] += 1
+                if metadata.get("smiling"):
+                    summary["smile_start_events"] += 1
+                else:
+                    summary["smile_stop_events"] += 1
+
+        if reasons:
+            summary["attention_drop_reasons"] = [
+                {"reason": reason, "count": count} for reason, count in reasons.most_common()
+            ]
+
+        if example_notes:
+            summary["example_notes"] = example_notes[:10]
+
+        if summary["total_events"] == 0:
+            summary[
+                "narrative"
+            ] = "Vision analytics was enabled but no usable video events were captured."
+        else:
+            parts: List[str] = []
+            if summary["attention_events"]:
+                detail = ""
+                if summary["attention_drop_reasons"]:
+                    top_reasons = ", ".join(
+                        f"{item['reason']} x{item['count']}"
+                        for item in summary["attention_drop_reasons"][:3]
+                    )
+                    detail = f" (common reasons: {top_reasons})"
+                parts.append(
+                    f"Detected {summary['attention_events']} attention-related events{detail}."
+                )
+            if summary["smile_events"]:
+                parts.append(
+                    f"Detected {summary['smile_events']} smile events ({summary['smile_start_events']} start / {summary['smile_stop_events']} stop)."
+                )
+            if summary["example_notes"]:
+                parts.append(
+                    f"Examples: {summary['example_notes'][0]}"
+                    + (" ..." if len(summary["example_notes"]) > 1 else "")
+                )
+            summary["narrative"] = " ".join(parts)
+
+        return summary

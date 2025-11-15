@@ -162,6 +162,25 @@ To show an avatar when users join the Daily room:
 3. (Optional) Slow down the animation by increasing `AVATAR_FRAME_REPEAT` (each frame is held for N transport frames).
 4. Start the bot normally (`python main.py`). The agent now publishes a video track so the browser displays the animated avatar tile while the bot speaks.
 
+### Vision Analytics (User Engagement)
+
+Set `VISION_ANALYTICS_ENABLED=true` in `.env` to subscribe to each participant's camera feed and run light-weight vision analytics (OpenCV Haar cascades). The processor samples a few frames per second, tracks attention (eye contact / looking away) and smiles, and logs state changes to the console and transcript file. Tunable knobs:
+
+```bash
+VISION_TARGET_FPS=6             # higher = more responsive, higher CPU usage
+VISION_MAX_FRAME_WIDTH=640      # resize width before running the model
+VISION_EYE_AR_THRESHOLD=0.18    # eye-aspect ratio, tweak for your lighting
+VISION_LOOK_AWAY_THRESHOLD=0.12 # nose offset threshold for attention
+VISION_SMILE_THRESHOLD=1.8      # larger ratios make “smile” harder to trigger
+VISION_MIN_EVENT_GAP_SECS=2.5   # debounce for repeated events
+```
+
+After enabling:
+1. `pip install -r requirements.txt` (installs `opencv-python` for the analyzer).
+2. Start the bot (`python main.py`) and join the Daily room with your camera on.
+3. Move your gaze off-screen or smile—the logs should emit entries such as `👀 Vision: User disengaged ...` and the transcript JSONL gains `"event": "vision"` entries. These engagement events are also kept in-memory on `VoiceAgent.last_engagement_event` for future LLM prompt conditioning.
+4. When transcript analysis is enabled, those vision events are summarized and fed into the OpenAI post-run analysis so coaching feedback reflects non-verbal engagement cues.
+
 ### Transcript Archiving
 
 Each conversation run is automatically written to the directory defined by

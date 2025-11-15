@@ -81,6 +81,25 @@ class TranscriptWriter:
 
         self._write_line(entry)
 
+    def record_event(
+        self,
+        event_type: str,
+        text: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """Append a non-message event to the transcript."""
+        entry = {
+            "type": "event",
+            "conversation_id": self.conversation_id,
+            "event": event_type,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        if text:
+            entry["text"] = text
+        if metadata:
+            entry["metadata"] = metadata
+        self._write_line(entry)
+
     def mark_conversation_end(self, reason: str = "completed") -> None:
         """Record that the conversation has ended."""
         self._write_line(

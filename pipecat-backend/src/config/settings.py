@@ -156,6 +156,46 @@ class Settings(BaseSettings):
         description="Enable smart turn detection for better conversation flow"
     )
 
+    # Vision Analytics (Video Engagement)
+    vision_analytics_enabled: bool = Field(
+        default=False,
+        description="Enable camera-based engagement and emotion analytics"
+    )
+    vision_target_fps: float = Field(
+        default=6.0,
+        ge=1.0,
+        le=30.0,
+        description="Maximum number of frames per second to analyze from the user's camera"
+    )
+    vision_max_frame_width: int = Field(
+        default=640,
+        ge=64,
+        description="Resize incoming frames to this width before running CV models"
+    )
+    vision_eye_ar_threshold: float = Field(
+        default=0.18,
+        ge=0.05,
+        le=0.5,
+        description="Eye aspect ratio threshold used to detect closed eyes"
+    )
+    vision_look_away_threshold: float = Field(
+        default=0.12,
+        ge=0.02,
+        le=0.5,
+        description="Normalized horizontal offset threshold to mark a user as looking away"
+    )
+    vision_smile_threshold: float = Field(
+        default=0.25,
+        ge=0.05,
+        le=1.0,
+        description="Smile width ratio threshold (relative to face width)"
+    )
+    vision_min_event_gap_secs: float = Field(
+        default=2.5,
+        ge=0.5,
+        description="Minimum seconds between emitting repeated engagement events"
+    )
+
     @property
     def is_development(self) -> bool:
         """Check if running in development mode."""
