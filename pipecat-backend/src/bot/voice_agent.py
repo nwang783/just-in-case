@@ -22,6 +22,12 @@ from src.services.tts_service import TTSServiceFactory
 from src.services.stt_service import STTServiceFactory
 from src.transport.daily_transport import DailyTransportFactory
 from src.services.daily_room_service import DailyRoomService, DailyRoomCreationError, DailyRoom
+from src.services.avatar_service import (
+    AvatarAnimationProcessor,
+    AvatarFrames,
+    AvatarLoadingError,
+    AvatarService,
+)
 
 
 class VoiceAgent:
@@ -56,6 +62,7 @@ class VoiceAgent:
         self.stt_provider = stt_provider
         self.room_url = room_url
         self.created_room: Optional[DailyRoom] = None
+        self.avatar_frames: Optional[AvatarFrames] = None
 
         logger.info(f"Initializing Voice Agent with providers:")
         logger.info(f"  LLM: {llm_provider}")
@@ -113,10 +120,30 @@ class VoiceAgent:
             "No Daily room available. Provide DAILY_ROOM_URL or enable auto creation."
         )
 
+    def _load_avatar_frames(self):
+        """Load avatar image frames from disk."""
+        if not self.settings.avatar_enabled:
+            return
+
+        logger.info("Loading avatar frames for video output")
+        avatar_service = AvatarService(
+            assets_dir=self.settings.avatar_assets_path(),
+            glob_pattern=self.settings.avatar_frame_glob,
+        )
+        try:
+            self.avatar_frames = avatar_service.load_frames()
+        except AvatarLoadingError as exc:
+            raise RuntimeError(
+                "Avatar enabled but frames could not be loaded. "
+                "Check AVATAR_ASSETS_DIR and ensure frames exist."
+            ) from exc
+
     def _create_services(self):
         """Create all required services."""
         logger.info("Creating services...")
         resolved_room_url = self._resolve_room_url()
+        if self.settings.avatar_enabled and not self.avatar_frames:
+            self._load_avatar_frames()
 
         # Create VAD analyzer if enabled
         vad_analyzer = None
@@ -156,6 +183,7 @@ class VoiceAgent:
             room_url=resolved_room_url,
             audio_out_enabled=True,
             audio_in_enabled=True,
+            video_out_enabled=self.settings.avatar_enabled,
             vad_analyzer=vad_analyzer,
             turn_analyzer=turn_analyzer,
         )
@@ -245,9 +273,17 @@ class VoiceAgent:
             pipeline_processors.append(bot_logger)
 
         # Continue with rest of pipeline
+        pipeline_processors.append(self.tts)   # Text-to-Speech
+
+        if self.settings.avatar_enabled and self.avatar_frames:
+            avatar_processor = AvatarAnimationProcessor(
+                quiet_frame=self.avatar_frames.quiet_frame,
+                talking_frame=self.avatar_frames.talking_frame,
+            )
+            pipeline_processors.append(avatar_processor)
+
         pipeline_processors.extend([
-            self.tts,                          # Text-to-Speech
-            self.transport.output(),           # Audio output to Daily
+            self.transport.output(),           # Audio/video output to Daily
             assistant_aggregator,              # Aggregate assistant responses
         ])
 
@@ -303,6 +339,10 @@ class VoiceAgent:
 
             # Create the task
             task = self._create_task()
+
+            # Queue avatar idle frame so Daily publishes video immediately
+            if self.settings.avatar_enabled and self.avatar_frames:
+                await task.queue_frame(self.avatar_frames.quiet_frame)
 
             # Optional: Send greeting message
             if self.settings.bot_greeting:

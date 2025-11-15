@@ -39,6 +39,18 @@ class Settings(BaseSettings):
         ge=0,
         description="Minutes until auto-created rooms expire (0 disables expiration)"
     )
+    avatar_enabled: bool = Field(
+        default=False,
+        description="Enable streaming an avatar image sequence to the Daily room"
+    )
+    avatar_assets_dir: str = Field(
+        default="assets",
+        description="Relative or absolute path to avatar image frames"
+    )
+    avatar_frame_glob: str = Field(
+        default="*.png",
+        description="Glob pattern for avatar frames within the assets directory"
+    )
 
     # OpenAI Configuration (LLM and TTS)
     openai_api_key: str = Field(..., description="OpenAI API key")
@@ -155,6 +167,16 @@ class Settings(BaseSettings):
 
         logger.debug(f"Loaded system prompt ({len(content)} characters)")
         return content
+
+    def avatar_assets_path(self) -> Path:
+        """Return the absolute path to the avatar assets directory."""
+        assets_path = Path(self.avatar_assets_dir)
+        if assets_path.is_absolute():
+            return assets_path
+        # Allow prefixes like "pipecat-backend/assets" without duplicating the root
+        if assets_path.parts and assets_path.parts[0] == PROJECT_ROOT.name:
+            return PROJECT_ROOT.parent / assets_path
+        return PROJECT_ROOT / assets_path
 
 
 # Global settings instance
