@@ -1,0 +1,187 @@
+{
+  "mckinsey-company": {
+    "name": "McKinsey & Company",
+    "logo": "/logos/mckinsey.svg",
+    "color": "bg-blue-600",
+    "difficulty": "Advanced",
+    "interviews": [
+      {
+        "type": "Problem-Solving Interview (PSI)",
+        "format": "Interviewer-led case",
+        "description": "Interviewer presents a client problem and guides the candidate through data, exhibits and focused questions. Expect hypothesis-driven probing and frequent data tables.",
+        "examplePrompts": "\"A client's retail margins are slipping — how would you diagnose the cause?\" \"Here's a slide with sales & costs — what stands out? What do you want to test next?\"",
+        "evaluation": "Structured problem solving, hypothesis-driven thinking, mental math, ability to interpret exhibits quickly and prioritize analyses.",
+        "keyFocus": "Hypothesis-driven thinking, mental math, data interpretation",
+        "tip": "State a clear hypothesis early, build a short issue tree, verbalize assumptions, walk through arithmetic aloud."
+      },
+      {
+        "type": "Personal Experience Interview (PEI)",
+        "format": "One deep behavioral story (10–15 min) with many follow-ups",
+        "description": "McKinsey drills one episode to assess core traits rather than many anecdotes.",
+        "examplePrompts": "\"Tell me about a time you led a team through a difficult situation.\" Follow-ups: \"What specifically did you do? Why that choice? What were the measurable results?\"",
+        "evaluation": "Leadership, personal impact, initiative, collaboration, self-awareness and ability to quantify impact.",
+        "keyFocus": "Leadership, personal impact, quantifiable results",
+        "tip": "Prepare 3–4 STAR stories focused on your actions with measurable outcomes; rehearse many follow-ups."
+      },
+      {
+        "type": "Digital Assessment / Solve / PST",
+        "format": "Timed web assessment or PST (26 Q MCQ)",
+        "description": "Screening tests: historically the PST and more recently McKinsey's digital Solve assessment — both test problem-solving under time pressure through data interpretation and simulation exercises.",
+        "examplePrompts": "PST example: short passages + tables with MCQs like \"Which conclusion is supported by the data?\" Solve: simulation exercises and case-style tasks in a timed web assessment.",
+        "evaluation": "Speedy data-interpretation, quantitative reasoning, deductive logic under time pressure.",
+        "keyFocus": "Data interpretation under time pressure",
+        "tip": "Practice official McKinsey PST PDFs or Solve practice; timeboxed drills and data-sufficiency training."
+      }
+    ]
+  },
+  "boston-consulting-group": {
+    "name": "Boston Consulting Group",
+    "logo": "/logos/bcg.svg",
+    "color": "bg-green-600",
+    "difficulty": "Advanced",
+    "interviews": [
+      {
+        "type": "Candidate-led Case Interview",
+        "format": "Candidate structures and leads the analysis",
+        "description": "Candidate structures and leads the analysis (you drive the issues / frameworks). BCG provides prep materials and practice cases.",
+        "examplePrompts": "\"A client in X industry is losing market share — how would you approach?\" Expect open problem statements and interviewer prompts to probe your structure and insights.",
+        "evaluation": "Structure & creativity of problem decomposition, commercial judgment, math, and clear communication.",
+        "keyFocus": "Creative problem decomposition, commercial judgment",
+        "tip": "Lead with a framework/issue tree, explain your priority hypotheses, and present concise recommendations."
+      },
+      {
+        "type": "Fit / Behavioral Interview",
+        "format": "Behavioral questions often mixed into case",
+        "description": "Behavioral questions to assess leadership, teamwork, and personal fit. Often mixed into a case interview.",
+        "examplePrompts": "\"Tell me about a time you persuaded peers to accept your idea.\" Follow-ups on trade-offs, obstacles, and outcomes.",
+        "evaluation": "Cultural fit, collaboration, influence, and drive.",
+        "keyFocus": "Cultural fit, collaboration, influence",
+        "tip": "Use STAR with concrete metrics; show impact and working style."
+      }
+    ]
+  },
+  "bain-company": {
+    "name": "Bain & Company",
+    "logo": "/logos/bc.svg",
+    "color": "bg-red-600",
+    "difficulty": "Advanced",
+    "interviews": [
+      {
+        "type": "Candidate-led Case",
+        "format": "Candidate leads with commercial clarity",
+        "description": "Bain emphasizes commercial clarity and actionable recommendations; candidate leads the case. Bain provides official prep resources and practice cases.",
+        "examplePrompts": "\"How should a retailer decide whether to enter an online channel?\" \"What are the main levers to improve this client's margin?\"",
+        "evaluation": "Practical commercial instincts, synthesis, ability to recommend clear, implementable actions.",
+        "keyFocus": "Practical commercial instincts, actionable recommendations",
+        "tip": "Focus on recommendations and implementation – close with a clear, prioritized action plan."
+      },
+      {
+        "type": "Fit / Experience Interview",
+        "format": "Behavioral discussion of past work",
+        "description": "Behavioral discussion of past work and impact, tied to Bain's operating principles.",
+        "examplePrompts": "\"Walk me through a project you're proud of and the specific role you played.\"",
+        "evaluation": "Personal impact, teamwork, client presence, and cultural fit.",
+        "keyFocus": "Personal impact, teamwork, client presence",
+        "tip": "Prepare examples showing both problem solving and client-facing behavior."
+      }
+    ]
+  },
+  "deloitte-strategy": {
+    "name": "Deloitte Strategy",
+    "logo": "/logos/deloitte.jpeg",
+    "color": "bg-gray-800",
+    "logoBg": "#000",
+    "difficulty": "Intermediate",
+    "interviews": [
+      {
+        "type": "One-on-one Case Interview",
+        "format": "Mix of candidate and interviewer-led",
+        "description": "Individual case interviews for strategy roles; format mixes candidate-led and interviewer-led depending on the team.",
+        "examplePrompts": "\"Analyze this market-entry scenario\" or \"How would you help a client cut costs by 10%?\"",
+        "evaluation": "Structured analysis, communication, ability to tailor solutions to client context.",
+        "keyFocus": "Structured analysis, implementation practicality",
+        "tip": "Clarify scope early, tie recommendations to implementation practicality."
+      },
+      {
+        "type": "Group Case / Assessment Centre",
+        "format": "Team-based problem solving",
+        "description": "Many Deloitte processes include group cases and assessment-center style exercises, especially for campus hires.",
+        "examplePrompts": "\"Your team has 60 minutes to analyze the problem and present recommendations.\"",
+        "evaluation": "Teamwork, facilitation, ability to synthesize group inputs, persuasion.",
+        "keyFocus": "Teamwork, facilitation, synthesis",
+        "tip": "Speak early, structure the team's approach, and ensure you both lead and listen."
+      }
+    ]
+  },
+  "pwc-strategy": {
+    "name": "PwC Strategy&",
+    "logo": "/logos/pwc.svg",
+    "color": "bg-amber-700",
+    "difficulty": "Advanced",
+    "interviews": [
+      {
+        "type": "Candidate-led Case Interview",
+        "format": "Candidate-led with written/group presentation",
+        "description": "Strategy& blends traditional consulting case formats with PwC structure; expect candidate-led cases plus behavioral questions.",
+        "examplePrompts": "\"A manufacturer wants to enter country X — size the market and design an entry plan.\"",
+        "evaluation": "Structured problem solving, commercial thinking, presentation skills.",
+        "keyFocus": "Structured problem solving, commercial thinking",
+        "tip": "Practice both case breakdowns and written/group presentation exercises."
+      },
+      {
+        "type": "Written Case / Presentation",
+        "format": "Slide deck preparation and presentation",
+        "description": "Many recruiting tracks include written cases or group exercises where you prepare a short presentation.",
+        "examplePrompts": "\"Analyze the slide pack and deliver a 5-minute recommendation with 3 supporting points.\"",
+        "evaluation": "Written synthesis, slide/storytelling, teamwork.",
+        "keyFocus": "Written synthesis, slide/storytelling",
+        "tip": "Practice succinct slide decks and presenting with clarity under time pressure."
+      },
+      {
+        "type": "Behavioral / Fit Interview",
+        "format": "Standard behavioral interview",
+        "description": "Standard behavioral interviews targeted at leadership, client service and consulting drive.",
+        "examplePrompts": "\"Describe a time you managed conflict on a team project.\"",
+        "evaluation": "Fit, client orientation, collaboration.",
+        "keyFocus": "Leadership, client service, consulting drive",
+        "tip": "Have STAR examples with quantifiable results tied to client outcomes."
+      }
+    ]
+  },
+  "ey-parthenon": {
+    "name": "EY-Parthenon",
+    "logo": "/logos/ey.jpeg",
+    "color": "bg-indigo-600",
+    "logoBg": "#161822",
+    "difficulty": "Advanced",
+    "interviews": [
+      {
+        "type": "Candidate-led Case Interview",
+        "format": "Describe → Recommend → Defend structure",
+        "description": "EY-Parthenon focuses on strategy cases divided into 'describe → recommend → defend' flow.",
+        "examplePrompts": "\"Walk me through how you'd evaluate M&A target X for our client.\"",
+        "evaluation": "Strategic judgment, structuring, ability to defend recommendations under challenge.",
+        "keyFocus": "Strategic judgment, structuring, defending recommendations",
+        "tip": "Use the describe-recommend-defend structure; be ready to defend assumptions with quantitative thinking."
+      },
+      {
+        "type": "Group / Written Exercises",
+        "format": "Assessment center with team presentation",
+        "description": "Campus and some lateral processes use group cases and written deliverables followed by presentations.",
+        "examplePrompts": "\"As a team, produce a one-page recommendation in 45 minutes and present it.\"",
+        "evaluation": "Collaboration, ability to synthesize quickly, and presentation polish.",
+        "keyFocus": "Collaboration, synthesis, presentation polish",
+        "tip": "Lead with a clear recommendation, back it with 2–3 succinct points, and involve teammates."
+      },
+      {
+        "type": "Behavioral / Fit Interview",
+        "format": "Leadership and influence behavioral",
+        "description": "Behavioral questions probing leadership, impact, and motivation for strategy roles.",
+        "examplePrompts": "\"Tell me about a time you had to influence senior stakeholders.\"",
+        "evaluation": "Influence, client readiness, maturity of judgment.",
+        "keyFocus": "Influence, client readiness, maturity of judgment",
+        "tip": "Prepare concrete examples that emphasize persuasion and measurable outcomes."
+      }
+    ]
+  }
+}
