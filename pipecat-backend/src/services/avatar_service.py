@@ -36,9 +36,15 @@ class AvatarFrames:
 class AvatarService:
     """Loads avatar assets from disk."""
 
-    def __init__(self, assets_dir: Path, glob_pattern: str = "*.png"):
+    def __init__(
+        self,
+        assets_dir: Path,
+        glob_pattern: str = "*.png",
+        frame_repeat: int = 1,
+    ):
         self.assets_dir = Path(assets_dir)
         self.glob_pattern = glob_pattern
+        self.frame_repeat = max(1, frame_repeat)
 
     def load_frames(self) -> AvatarFrames:
         """Load avatar frames and build quiet/talking states."""
@@ -48,12 +54,13 @@ class AvatarService:
                 f"No avatar frames found in {self.assets_dir} matching {self.glob_pattern}"
             )
 
-        quiet_frame = frames[0]
-        if len(frames) == 1:
-            talking_frames = frames
+        base_sequence = self._repeat_sequence(frames)
+        quiet_frame = base_sequence[0]
+        if len(base_sequence) == 1:
+            talking_frames = base_sequence
         else:
-            # Mirror frames for smoother looping animation
-            talking_frames = frames + frames[-2:0:-1]
+            mirrored = frames[-2:0:-1]
+            talking_frames = base_sequence + self._repeat_sequence(mirrored)
 
         talking_frame = SpriteFrame(images=talking_frames)
         logger.info(
@@ -76,14 +83,22 @@ class AvatarService:
     def _load_single_frame(self, path: Path) -> OutputImageRawFrame:
         try:
             with Image.open(path) as img:
-                converted = img.convert("RGBA")
+                rgba = img.convert("RGBA")
+                background = Image.new("RGB", rgba.size, (0, 0, 0))
+                background.paste(rgba, mask=rgba.split()[-1])
                 return OutputImageRawFrame(
-                    image=converted.tobytes(),
-                    size=converted.size,
-                    format=converted.mode,
+                    image=background.tobytes(),
+                    size=background.size,
+                    format="RGB",
                 )
         except Exception as exc:
             raise AvatarLoadingError(f"Failed to load avatar frame {path}") from exc
+
+    def _repeat_sequence(self, frames: List[OutputImageRawFrame]) -> List[OutputImageRawFrame]:
+        repeated: List[OutputImageRawFrame] = []
+        for frame in frames:
+            repeated.extend([frame] * self.frame_repeat)
+        return repeated if repeated else frames
 
 
 class AvatarAnimationProcessor(FrameProcessor):

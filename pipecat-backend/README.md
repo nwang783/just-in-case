@@ -106,6 +106,7 @@ DAILY_ROOM_EXP_MINUTES=120           # Set how long auto-created rooms remain ac
 AVATAR_ENABLED=false                 # Publish an avatar video track
 AVATAR_ASSETS_DIR=assets             # Directory containing PNG avatar frames
 AVATAR_FRAME_GLOB=robot0*.png        # Glob that matches avatar filenames
+AVATAR_FRAME_REPEAT=1                # Repeat frames to slow down the animation
 
 # OpenAI (LLM & TTS)
 OPENAI_API_KEY=your_key_here
@@ -145,6 +146,7 @@ ENVIRONMENT=development
 AVATAR_ENABLED=false
 AVATAR_ASSETS_DIR=assets
 AVATAR_FRAME_GLOB=robot0*.png
+AVATAR_FRAME_REPEAT=1
 ```
 
 ### Avatar Video Tile
@@ -152,6 +154,7 @@ AVATAR_FRAME_GLOB=robot0*.png
 To show an avatar when users join the Daily room:
 1. Drop sequential PNG frames (e.g., `robot001.png` …) into `pipecat-backend/assets/`.
 2. Set `AVATAR_ENABLED=true` in `.env`. Adjust `AVATAR_ASSETS_DIR` or `AVATAR_FRAME_GLOB` if you use a different folder or naming pattern.
+3. (Optional) Slow down the animation by increasing `AVATAR_FRAME_REPEAT` (each frame is held for N transport frames).
 3. Start the bot normally (`python main.py`). The agent now publishes a video track so the browser displays the animated avatar tile while the bot speaks.
 
 ## Customization

@@ -129,6 +129,7 @@ class VoiceAgent:
         avatar_service = AvatarService(
             assets_dir=self.settings.avatar_assets_path(),
             glob_pattern=self.settings.avatar_frame_glob,
+            frame_repeat=self.settings.avatar_frame_repeat,
         )
         try:
             self.avatar_frames = avatar_service.load_frames()
@@ -177,6 +178,13 @@ class VoiceAgent:
         else:
             logger.info("VAD is disabled in settings")
 
+        video_out_width = None
+        video_out_height = None
+        video_color_format = None
+        if self.settings.avatar_enabled and self.avatar_frames:
+            video_out_width, video_out_height = self.avatar_frames.quiet_frame.size
+            video_color_format = self.avatar_frames.quiet_frame.format
+
         # Create transport
         self.transport = DailyTransportFactory.create_transport(
             settings=self.settings,
@@ -184,6 +192,9 @@ class VoiceAgent:
             audio_out_enabled=True,
             audio_in_enabled=True,
             video_out_enabled=self.settings.avatar_enabled,
+            video_out_width=video_out_width,
+            video_out_height=video_out_height,
+            video_out_color_format=video_color_format,
             vad_analyzer=vad_analyzer,
             turn_analyzer=turn_analyzer,
         )

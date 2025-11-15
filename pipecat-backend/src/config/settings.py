@@ -51,6 +51,11 @@ class Settings(BaseSettings):
         default="*.png",
         description="Glob pattern for avatar frames within the assets directory"
     )
+    avatar_frame_repeat: int = Field(
+        default=1,
+        ge=1,
+        description="Repeat each avatar frame N times to slow down animation"
+    )
 
     # OpenAI Configuration (LLM and TTS)
     openai_api_key: str = Field(..., description="OpenAI API key")
