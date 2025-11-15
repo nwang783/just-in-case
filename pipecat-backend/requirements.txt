@@ -84,6 +84,7 @@ numpy==2.2.6
 onnxruntime==1.20.1
 openai==1.98.0
 orjson==3.11.1
+opencv-python==4.10.0.84
 packaging==25.0
 pillow==11.3.0
 pipecat-ai==0.0.92
@@ -116,6 +117,7 @@ regex==2025.7.34
 requests==2.32.4
 resampy==0.4.3
 rich==14.1.0
+mediapipe==0.10.15
 rich-toolkit==0.14.9
 rignore==0.6.4
 rsa==4.9.1
