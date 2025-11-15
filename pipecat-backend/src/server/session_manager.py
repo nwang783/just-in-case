@@ -17,6 +17,7 @@ from loguru import logger
 from src.bot.voice_agent import VoiceAgent
 from src.config.settings import Settings
 from src.services.daily_room_service import DailyRoom, DailyRoomCreationError, DailyRoomService
+from src.config.interview_prompts import build_interview_prompt
 
 # Session status constants
 SESSION_ROOM_CREATED = "room_created"
@@ -49,6 +50,7 @@ class SessionRecord:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_error: Optional[str] = None
+    session_prompt: Optional[str] = None
     bot_task: Optional[asyncio.Task] = field(default=None, repr=False)
     voice_agent: Optional[VoiceAgent] = field(default=None, repr=False)
 
@@ -95,6 +97,7 @@ class SessionManager:
             room_url=daily_room.url,
             room_name=daily_room.name,
             expires_at=daily_room.expires_at,
+            session_prompt=build_interview_prompt(company_slug, interview_type),
         )
 
         async with self._lock:
@@ -123,6 +126,7 @@ class SessionManager:
             voice_agent = VoiceAgent(
                 settings=self.settings,
                 room_url=session.room_url,
+                session_prompt=session.session_prompt,
             )
             session.voice_agent = voice_agent
             session.status = SESSION_BOT_STARTING
@@ -197,4 +201,3 @@ class SessionManager:
                 return
             session.bot_task = None
             session.voice_agent = None
-

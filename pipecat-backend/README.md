@@ -92,6 +92,8 @@ pipecat-backend/
 │   ├── server/
 │   │   ├── app.py              # FastAPI application
 │   │   └── session_manager.py  # Session lifecycle + Daily rooms
+│   ├── config/
+│   │   └── interview_prompts.py  # Company/interview specific prompt snippets
 │   ├── transport/
 │   │   └── daily_transport.py  # Daily.co WebRTC transport
 │   ├── config/
@@ -234,6 +236,20 @@ are created and when the Pipecat coach joins:
 The API enforces CORS for `http://localhost:3000` (and `127.0.0.1`) by default.
 Add more domains using the optional `FRONTEND_ALLOWED_ORIGINS` environment
 variable (comma-separated list).
+
+## Company-specific Prompt Injection
+
+When a session is created via `POST /api/sessions`, the backend looks up a
+company/interview specific snippet in `src/config/interview_prompts.py`. That
+snippet is appended to the base system prompt before the `VoiceAgent` starts,
+so each session adopts the correct persona (e.g., McKinsey PSI vs. Bain fit).
+Case-style entries also include scenario scripts plus “held-back” data blocks so
+the AI only reveals detailed exhibits when the candidate earns them.
+
+To extend or tweak behavior:
+1. Edit `interview_prompts.py` and adjust the entries keyed by `companySlug`
+   plus the exact `interviewType` strings used by the frontend.
+2. Restart the FastAPI server to pick up the changes.
 
 ## Customization
 
