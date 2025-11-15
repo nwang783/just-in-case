@@ -25,6 +25,9 @@ class DailyTransportFactory:
         audio_in_enabled: bool = True,
         video_out_enabled: bool = False,
         video_in_enabled: bool = False,
+        video_out_width: Optional[int] = None,
+        video_out_height: Optional[int] = None,
+        video_out_color_format: Optional[str] = None,
         transcription_enabled: bool = False,
         vad_analyzer: Optional[SileroVADAnalyzer] = None,
         turn_analyzer: Optional[object] = None,
@@ -41,6 +44,9 @@ class DailyTransportFactory:
             audio_in_enabled: Enable audio input (STT)
             video_out_enabled: Enable video output
             video_in_enabled: Enable video input
+            video_out_width: Override the width of the published video track
+            video_out_height: Override the height of the published video track
+            video_out_color_format: Override raw color format (e.g., "RGB")
             transcription_enabled: Enable Daily transcription
             vad_analyzer: Optional VAD analyzer for speech detection
             turn_analyzer: Optional turn analyzer for conversation turn detection
@@ -79,6 +85,13 @@ class DailyTransportFactory:
             vad_analyzer=vad_analyzer,
             turn_analyzer=turn_analyzer,
         )
+
+        if video_out_width:
+            params.video_out_width = video_out_width
+        if video_out_height:
+            params.video_out_height = video_out_height
+        if video_out_color_format:
+            params.video_out_color_format = video_out_color_format
 
         # Create and return transport
         transport = DailyTransport(
