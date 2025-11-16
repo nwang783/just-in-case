@@ -3,6 +3,8 @@
 Case interview practice experience with a Next.js frontend and a Pipecat voice
 agent backend.
 
+[Demo Video](https://youtu.be/6oCpjE5TdRI)
+
 ## Development Workflow
 
 ### 1. Backend (Pipecat)
